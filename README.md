@@ -24,7 +24,7 @@ are no real keys, no ad spend, and no calls.
 |---|---|---|
 | 0 | Scaffold, secrets template, operating rules | Done |
 | 1 | System of record (Postgres schema + seed + gate test) | Done |
-| — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Next |
+| — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Done |
 | 2–8 | Signals, brain + approvals, paid ads loop, callbacks, attribution, interrupts, hardening | Later |
 
 ## Layout
@@ -37,6 +37,7 @@ MUSE.md                 Operating rules, guardrails, approval law
 workflows/              Scheduled/triggered jobs (stubs until their phase)
 db/migrations/          Numbered SQL migrations
 db/schema.md            Human-readable schema
+dashboard/              Next.js owner dashboard (reads the same Postgres)
 src/api/                Webhook receivers, approval endpoints
 src/lib/                Idempotency, spend-cap, logging helpers
 tests/                  One test per phase gate
@@ -60,6 +61,37 @@ for local development only.
 
 The schema, guardrails, and KPI views are documented in
 [`db/schema.md`](./db/schema.md).
+
+## Dashboard
+
+```bash
+cd dashboard
+npm install
+npm run dev              # http://127.0.0.1:3000 (bound to localhost only; there is no login yet)
+```
+
+- **Overview (`/`):** the four KPI cards, the approvals queue, and a live
+  agent activity feed.
+  - **KPI cards:** Cost Per Lead, Speed to Lead, Booked & Paid, and Ad to
+    Customer.
+  - **Approvals queue:** each item has Approve / Edit / Reject buttons.
+  - **Activity feed:** refreshes every 5 seconds. You can filter by agent or
+    show only interrupts and escalations.
+- **Morning digest (`/digest`):** the one-page summary from
+  `.claude/skills/morning-digest/` for any past day.
+
+**Approve** writes an `approvals` row decided by the owner, plus activity-log
+rows. It does **not** publish or spend, because no publish or spend path
+exists yet.
+
+- **Edit** keeps the item pending.
+- **Reject** takes an optional note.
+- **Unverified claims:** a draft flagged for one can't be approved until you
+  confirm the claim. The server enforces this as well as the browser.
+- **Expired items:** pending items past their deadline are marked expired,
+  never approved.
+
+`npm run db:seed` (from the repo root) restores the demo queue.
 
 ## Secrets
 

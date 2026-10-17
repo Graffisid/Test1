@@ -39,6 +39,7 @@ forced onto an ad.
 | `approvals` | One owner decision on a draft, launch, reallocation, or reply | `approval:<kind>:<subject>`, **NOT NULL** |
 | `tracked_competitors` | The defined competitor set the poller watches | — (`UNIQUE(page_id)`) |
 | `competitor_ads` | One competitor ad, with first/last seen, active flag, rubric breakdown, and verdict | — (`UNIQUE(ad_archive_id)`) |
+| `publications` | One executed publish of a human-approved approval (simulated in this build) | `publish:<approval id>`, **NOT NULL**, plus `UNIQUE(approval_id)` |
 | `metrics` | Daily platform numbers per variant: spend, impressions, clicks, platform leads | — (`UNIQUE(metric_date, ad_variant_id)`) |
 | `agent_activity_log` | Every agent decision and every outbound action | Set for outbound actions |
 
@@ -60,6 +61,8 @@ forced onto an ad.
 
 | Dashboard can only record decisions, never rewrite data | Role `dashboard_app` (migration 014): `SELECT`, column-level `UPDATE` on approvals and variants, `INSERT` on the log |
 | Ingest services can only add raw signals and competitor sightings | Role `ingest_app` (migration 015): `INSERT` on signals, insert and column-level update on competitor_ads, `INSERT` on the log; **no access to leads, approvals, or ads** |
+| Nothing publishes without a human approval | Trigger `publications_gate` (approved, human decider, kind matches, decided before expiry); deferred trigger `ad_variants_live_gate` (live ⇒ publication exists); publications append-only |
+| Agents request approvals, never decide them | Role `brain_app` (migration 016): column-level `INSERT` on approvals and ad_variants without status or decision columns |
 | Signal provenance is never hidden | `signals.ingested_via` ∈ webhook / poller / manual_import / simulator / seed |
 | Audit log can't be edited or deleted, by anyone | Trigger `agent_activity_log_no_update_delete`; the `approval_id` foreign key is `ON DELETE RESTRICT` |
 

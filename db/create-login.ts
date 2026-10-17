@@ -3,6 +3,8 @@
  *
  *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- dashboard   # dashboard_login ∈ dashboard_app
  *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- ingest      # ingest_login    ∈ ingest_app
+ *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- brain       # brain_login     ∈ brain_app
+ *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- publisher   # publisher_login ∈ publisher_app
  *
  * The password comes from the environment only and never touches the repo.
  * (DASHBOARD_DB_PASSWORD is still accepted for the dashboard, for backwards compatibility.)
@@ -10,7 +12,7 @@
 import pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
 
-const SERVICES = { dashboard: "dashboard_app", ingest: "ingest_app" } as const;
+const SERVICES = { dashboard: "dashboard_app", ingest: "ingest_app", brain: "brain_app", publisher: "publisher_app" } as const;
 const service = (process.argv[2] ?? "dashboard") as keyof typeof SERVICES;
 if (!(service in SERVICES)) {
   console.error(`Unknown service "${service}". Use one of: ${Object.keys(SERVICES).join(", ")}`);

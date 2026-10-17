@@ -16,10 +16,15 @@
     "ingest:start": "tsx src/api/start.ts",
     "simulate:meta": "tsx src/tools/simulate-meta.ts",
     "poll:competitors": "tsx workflows/poll-competitors.ts",
-    "reviews:import": "tsx src/tools/import-reviews.ts"
+    "reviews:import": "tsx src/tools/import-reviews.ts",
+    "brain:triage": "tsx workflows/triage-signals.ts",
+    "brain:write-ads": "tsx workflows/write-ads.ts",
+    "publish:approved": "tsx workflows/publish-approved.ts"
   },
   "dependencies": {
-    "pg": "^8.23.1"
+    "@anthropic-ai/sdk": "^0.135.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

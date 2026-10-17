@@ -262,7 +262,7 @@ type Row = Record<string, unknown>;
 const rows: Record<string, Row[]> = {
   tracked_competitors: [], competitor_ads: [],
   ads: [], ad_variants: [], signals: [], customers: [], comments: [], leads: [], calls: [],
-  appointments: [], approvals: [], metrics: [], agent_activity_log: [],
+  appointments: [], approvals: [], publications: [], metrics: [], agent_activity_log: [],
 };
 const INSERT_ORDER = Object.keys(rows);
 
@@ -344,6 +344,9 @@ function build() {
       });
       log({ at: decided, agent: "owner", department: "publishing", action: "approve", decision: `Approved launch of "${ad.name}"`,
         entityType: "approval", entityId: apId, approvalId: apId });
+      rows.publications.push({ id: randomUUID(), approval_id: apId, kind: "ad_launch", target_type: "ad", target_id: adId,
+        is_simulated: true, external_ref: null, published_at: launched, idempotency_key: `publish:${apId}`,
+        created_at: launched, updated_at: launched });
       log({ at: launched, agent: "system", department: "paid_ads", action: "launch_ad",
         decision: `Launched "${ad.name}" at $${ad.dailyBudget}/day (simulated; spend-cap check passed)`,
         entityType: "ad", entityId: adId, approvalId: apId, key: `log:launch:${adId}` });
@@ -406,6 +409,9 @@ function build() {
         decision: `${approved ? "Approved" : "Rejected"} ${ad.key}-${v.label}${v.rejectNote ? ` — ${v.rejectNote}` : ""}`,
         entityType: "approval", entityId: apId, approvalId: apId });
       if (publishedAt) {
+        rows.publications.push({ id: randomUUID(), approval_id: apId, kind: "ad_variant", target_type: "ad_variant",
+          target_id: vId, is_simulated: true, external_ref: null, published_at: publishedAt,
+          idempotency_key: `publish:${apId}`, created_at: publishedAt, updated_at: publishedAt });
         log({ at: publishedAt, agent: "system", department: "publishing", action: "publish_variant",
           decision: `Published ${ad.key}-${v.label} (simulated)`, entityType: "ad_variant", entityId: vId,
           approvalId: apId, key: `log:publish:${vId}` });
@@ -415,6 +421,10 @@ function build() {
       }
       if (v.fate === "platform_rejected") {
         const t = torontoAt(9, 11, 20);
+        // It was approved and submitted (a publication), then Meta's review rejected it.
+        rows.publications.push({ id: randomUUID(), approval_id: apId, kind: "ad_variant", target_type: "ad_variant",
+          target_id: vId, is_simulated: true, external_ref: "meta_review:rejected", published_at: at(t.getTime() - 40 * MIN),
+          idempotency_key: `publish:${apId}`, created_at: at(t.getTime() - 40 * MIN), updated_at: at(t.getTime() - 40 * MIN) });
         log({ at: at(t.getTime() - 40 * MIN), agent: "system", department: "publishing", action: "submit_variant",
           decision: `Submitted ${ad.key}-${v.label} to Meta review (simulated)`, entityType: "ad_variant", entityId: vId, approvalId: apId,
           key: `log:submit:${vId}` });

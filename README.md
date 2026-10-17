@@ -26,7 +26,8 @@ are no real keys, no ad spend, and no calls.
 | 1 | System of record (Postgres schema + seed + gate test) | Done |
 | — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Done |
 | 2 | Signals ingestion: Meta webhooks, competitor poller, review import | Done (mock), real Meta app pending |
-| 3–8 | Brain + approvals, paid ads loop, callbacks, attribution, interrupts, hardening | Later |
+| 3 | Brain (triage, ad-writer, auditor, analyst draft scoring) + approval flow + publish gate | Done (mock model; live Claude off until approved) |
+| 4–8 | Paid ads loop, callbacks, attribution, interrupts, hardening | Later |
 
 ## Layout
 
@@ -102,6 +103,52 @@ npm run reviews:import -- reviews.csv      # manual review import
   source today is a manual CSV import. See the `MUSE.md` provider log.
 - **Provenance:** every signal records `ingested_via`: `webhook`, `poller`,
   `manual_import`, `simulator`, or `seed`.
+
+## The brain and the approval flow (Phase 3)
+
+```bash
+# once: least-privilege logins for the agents and the publisher
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- brain       # → BRAIN_DATABASE_URL
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- publisher   # → PUBLISHER_DATABASE_URL
+
+npm run brain:triage                          # classify + route every new signal
+npm run brain:write-ads -- "Furnace Tune-Up"  # 20 drafts → auditor → analyst → top 3 to your queue
+# approve / edit / reject in the dashboard
+npm run publish:approved                      # the ONLY publish path (simulated: nothing reaches Meta)
+```
+
+- **triage** classifies each signal: intent, confidence, language, urgency,
+  and where it goes (`route_to`).
+  - **Validation:** the output must pass a Zod schema. Anything invalid is
+    discarded, logged, and routed to a human.
+  - **Routing rules:** code overrides the model. Anything angry, or below 0.70
+    confidence, goes to a human, and a database constraint enforces this too.
+  - **Untrusted text:** public text reaches the model inside
+    `<untrusted_customer_text>` as data. A message that tries to give
+    instructions is routed to a human.
+- **ad-writer** writes 20 variants per cycle. It learns from your scored
+  winners and from competitor concepts in the learn-from tier.
+  - **Auditor** (code): rejects banned claims and flags unverifiable ones,
+    using the rules in `MUSE.md`.
+  - **Analyst** (code): scores every surviving draft with a transparent rubric.
+    The top 3 become `draft` variants, each with a `pending` approval.
+  - **Once per cycle:** each ad gets one run per cycle.
+  - **No status changes:** ad-writer can't set any status. Its column-level
+    database grants won't allow it.
+- **Publish gate:** every publish is a `publications` row. The database refuses
+  one unless a human approved that approval, before it expired. One approval
+  allows at most one publication.
+
+  A variant can't be `live` without a publication, and this is checked at
+  commit, even for the superuser. Rejecting a draft therefore makes every
+  publish path fail.
+- **Model:**
+  - **Default:** a deterministic mock, so nothing is paid.
+  - **Live Claude:** set `LLM_MODE=live`, with `MOCK_MODE` not equal to `mock`.
+    This uses `claude-opus-5-5` via the official SDK's structured outputs
+    (`messages.parse`), at `low` effort for triage and `medium` for ad-writer.
+  - **Daily cap:** live calls are capped per day by `LLM_DAILY_BUDGET_CAD`,
+    checked in code against the activity log.
 
 ## Dashboard
 

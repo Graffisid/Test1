@@ -6,8 +6,8 @@
  *   - only applies to a still-pending, unexpired approval,
  *   - is recorded as an approvals row change + agent_activity_log rows (agent = 'owner').
  *
- * Approval does NOT publish or spend: no publish/spend path exists in this build (mock mode).
- * The approved row is what a future publisher (Phase 3/4) will require before acting.
+ * Approval does NOT publish or spend by itself. workflows/publish-approved.ts is the only publish path,
+ * and the database refuses any publication without a human-approved row (migration 016).
  */
 import { revalidatePath } from "next/cache";
 import { pool, OWNER_NAME } from "@/lib/db";
@@ -105,9 +105,14 @@ export async function approveAction(_prev: ActionState | null, form: FormData): 
     await log(client, "system", "publish_deferred",
       row.kind === "budget_reallocation"
         ? "Approval recorded. Budget change NOT executed — spend path not built yet (mock mode, Phase 4)."
-        : "Approval recorded. Nothing published — publish path not built yet (mock mode, Phase 3).",
+        : "Approval recorded. The publisher will post it on its next run (simulated — nothing reaches Meta yet).",
       id, "ok", dept);
-    return { ok: true, message: "Approved. Recorded — nothing was published or spent (mock mode)." };
+    return {
+      ok: true,
+      message: row.kind === "budget_reallocation"
+        ? "Approved. Recorded — the budget change itself isn't built yet (Phase 4), so nothing was spent."
+        : "Approved. It will publish on the publisher's next run (simulated in this build).",
+    };
   }) as Promise<ActionState>;
 }
 

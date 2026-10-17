@@ -11,7 +11,12 @@
     "db:reset": "tsx db/migrate.ts --reset && tsx db/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
-    "db:create-dashboard-login": "tsx db/create-dashboard-login.ts"
+    "db:create-dashboard-login": "tsx db/create-login.ts dashboard",
+    "db:create-login": "tsx db/create-login.ts",
+    "ingest:start": "tsx src/api/start.ts",
+    "simulate:meta": "tsx src/tools/simulate-meta.ts",
+    "poll:competitors": "tsx workflows/poll-competitors.ts",
+    "reviews:import": "tsx src/tools/import-reviews.ts"
   },
   "dependencies": {
     "pg": "^8.23.1"

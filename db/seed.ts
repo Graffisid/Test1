@@ -16,6 +16,8 @@ import type pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
 import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 import { classifyVariant, type VariantCycleStats } from "../src/lib/classify.ts";
+import { MOCK_COMPETITORS, MockAdLibrarySource } from "../src/lib/ad-library.ts";
+import { pollCompetitors } from "../workflows/poll-competitors.ts";
 
 // ---------------------------------------------------------------------------
 // Deterministic randomness + Toronto-time helpers
@@ -258,6 +260,7 @@ const CAPTURE_TEMPLATE =
 
 type Row = Record<string, unknown>;
 const rows: Record<string, Row[]> = {
+  tracked_competitors: [], competitor_ads: [],
   ads: [], ad_variants: [], signals: [], customers: [], comments: [], leads: [], calls: [],
   appointments: [], approvals: [], metrics: [], agent_activity_log: [],
 };
@@ -422,49 +425,13 @@ function build() {
     }
   }
 
-  // ---- competitor ads from the Ad Library poller (Market Intelligence) -----
-  const COMPETITORS = ["Lakeshore Comfort Heating", "Halton Drain Pros", "Escarpment HVAC", "Bayview Plumbing Co."];
-  for (let i = 0; i < 24; i++) {
-    const advertiser = COMPETITORS[i % COMPETITORS.length];
-    const firstSeenDaysAgo = int(1, 60);
-    const active = chance(0.65);
-    const lastSeenDaysAgo = active ? 0 : int(0, Math.max(0, firstSeenDaysAgo - 1));
-    const days = firstSeenDaysAgo - lastSeenDaysAgo;
-    const variantsOfConcept = int(1, 5);
-    const isVideo = chance(0.5);
-    const hook = isVideo && chance(0.6);
-    const hasOffer = chance(0.75);
-    const longevity = days >= 30 ? 5 : days >= 14 ? 3 : days >= 3 ? 1 : 0;
-    const persistence = active ? 2 : days < 7 ? -2 : 0;
-    const variantPts = variantsOfConcept >= 3 ? 2 : 0;
-    const format = (hook ? 1 : 0) + (hasOffer ? 0 : -1);
-    const total = longevity + persistence + variantPts + format;
-    const verdict = total >= 7 ? "learn_from" : total >= 4 ? "watchlist" : "ignore";
-    const concept = pick(["fall tune-up special", "furnace financing", "emergency plumber 24/7", "drain camera inspection",
-      "heat pump rebate explainer", "water heater same-day install", "customer testimonial video"]);
-    const id = randomUUID();
-    const polledAt = torontoAt(0, 2, 0);
-    const extId = `mock_adlib_${100000 + i}`;
-    rows.signals.push({
-      id, source: "ad_library", external_id: extId, received_at: at(Math.min(polledAt.getTime(), NOW - 5 * MIN)),
-      payload: JSON.stringify({ advertiser, concept, first_seen: torontoDateString(NOW - firstSeenDaysAgo * DAY),
-        last_seen: torontoDateString(NOW - lastSeenDaysAgo * DAY), active, format: isVideo ? "video" : "static",
-        variants_of_concept: variantsOfConcept,
-        score: { longevity, persistence, variant_count: variantPts, format, total, verdict } }),
-      classification: null, intent: null, confidence: null, route_to: "analyst", processed_at: polledAt,
-      idempotency_key: `adlib:${extId}`, created_at: polledAt, updated_at: polledAt,
-    });
-    // A brand-new competitor ad triggers the "competitor launches something new" interrupt.
-    if (firstSeenDaysAgo === 1 || i === 7) {
-      log({ at: at(Math.min(polledAt.getTime() + 2 * MIN, NOW - 4 * MIN)), agent: "growth-director", department: "market_intelligence",
-        action: "interrupt", status: "interrupt", entityType: "signal", entityId: id,
-        decision: `Competitor launched something new: ${advertiser} — "${concept}". Notified owner; no action taken automatically.`,
-        details: { trigger: "competitor_launch" } });
-    }
+  // ---- tracked competitor set (Market Intelligence) ------------------------
+  // Their ads are recorded by the real poller (workflows/poll-competitors.ts) after insert — see seed().
+  for (const c of MOCK_COMPETITORS) {
+    const t = torontoAt(HISTORY_DAYS, 9);
+    rows.tracked_competitors.push({ id: randomUUID(), page_id: c.pageId, name: c.name, active: true,
+      notes: "Fictional competitor (mock data)", created_at: t, updated_at: t });
   }
-  log({ at: at(Math.min(torontoAt(0, 2, 1).getTime(), NOW - 4 * MIN)), agent: "analyst", department: "market_intelligence",
-    action: "score_competitor_ads", decision: "Scored 24 competitor ads with the longevity rubric (simulated Ad Library poll)",
-    cost: 0.012, latency: 5400 });
 
   // ---- daily loop: spend → comments → leads → calls → appointments --------
   const variantDaily = new Map<string, { day: number; spend: number; leads: number }[]>();
@@ -1016,14 +983,35 @@ export async function seed(url = databaseUrl()): Promise<Record<string, number>>
     await client.query("BEGIN");
     await client.query(`TRUNCATE ${[...INSERT_ORDER].reverse().join(", ")} RESTART IDENTITY CASCADE`);
     await insertAll(client);
+    // Competitor ads come from the same poller that runs in production, fed by the mock source.
+    const polledAt = new Date(Math.min(torontoAt(0, 2, 0).getTime(), NOW - 5 * MIN));
+    await pollCompetitors(client, new MockAdLibrarySource(new Date(NOW)), polledAt);
+    // History: the brand-new competitor ad raised the "competitor launches something new" interrupt.
+    const { rows: launched } = await client.query<{ id: string; advertiser: string; title: string }>(
+      `SELECT s.id, s.payload->>'advertiser' AS advertiser, s.payload->>'title' AS title
+       FROM signals s JOIN competitor_ads a ON a.ad_archive_id = s.external_id
+       WHERE s.source = 'ad_library' AND a.first_seen_at > $1 ORDER BY a.first_seen_at DESC LIMIT 1`,
+      [new Date(polledAt.getTime() - 2 * DAY)]);
+    if (launched[0]) {
+      await client.query(
+        `INSERT INTO agent_activity_log (occurred_at, agent, department, action, decision, status, entity_type, entity_id, details)
+         VALUES ($1, 'growth-director', 'market_intelligence', 'interrupt', $2, 'interrupt', 'signal', $3, $4)`,
+        [new Date(polledAt.getTime() + 2 * MIN),
+         `Competitor launched something new: ${launched[0].advertiser} — "${launched[0].title}". Notified owner; no action taken automatically.`,
+         launched[0].id, JSON.stringify({ trigger: "competitor_launch" })]);
+    }
     await client.query("COMMIT");
+    const counts: Record<string, number> = {};
+    for (const t of INSERT_ORDER) {
+      counts[t] = (await client.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${t}`)).rows[0].n;
+    }
+    return counts;
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
   } finally {
     await client.end();
   }
-  return Object.fromEntries(INSERT_ORDER.map((t) => [t, rows[t].length]));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

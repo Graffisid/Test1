@@ -25,7 +25,8 @@ are no real keys, no ad spend, and no calls.
 | 0 | Scaffold, secrets template, operating rules | Done |
 | 1 | System of record (Postgres schema + seed + gate test) | Done |
 | — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Done |
-| 2–8 | Signals, brain + approvals, paid ads loop, callbacks, attribution, interrupts, hardening | Later |
+| 2 | Signals ingestion: Meta webhooks, competitor poller, review import | Done (mock), real Meta app pending |
+| 3–8 | Brain + approvals, paid ads loop, callbacks, attribution, interrupts, hardening | Later |
 
 ## Layout
 
@@ -61,6 +62,46 @@ for local development only.
 
 The schema, guardrails, and KPI views are documented in
 [`db/schema.md`](./db/schema.md).
+
+## Signals ingestion (Phase 2)
+
+```bash
+# once: least-privilege DB login for the receiver, poller and imports
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- ingest
+# then set INGEST_DATABASE_URL, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN (see .env.example)
+
+npm run ingest:start                       # webhook receiver on http://127.0.0.1:3001
+npm run simulate:meta -- --repeat          # signed test deliveries (comments, DMs, lead form, rating)
+npm run poll:competitors                   # competitor ads (mock source)
+npm run poll:competitors -- --csv ads.csv  # manual import from the public Ad Library website
+npm run reviews:import -- reviews.csv      # manual review import
+```
+
+- **Webhook receiver** (`src/api/`): the receiver checks each delivery in a
+  fixed order:
+  1. **Size:** anything over 1 MB is refused.
+  2. **Signature:** the `X-Hub-Signature-256` HMAC is checked against the raw
+     bytes.
+  3. **JSON:** the body is parsed.
+  4. **Store:** each event becomes a `signals` row, keyed on Meta's event id,
+     so retries are no-ops.
+
+  What it handles:
+  - Page comments, lead forms, and ratings.
+  - Instagram comments and mentions.
+  - Messenger and Instagram DMs.
+
+  Our own echoes and edits are ignored. Anything the public writes is stored
+  as `payload.untrusted_text`.
+- **Competitor poller** (`workflows/poll-competitors.ts`): records first-seen
+  and last-seen for every ad from the tracked competitors. It scores each ad
+  with the Section 8 rubric and stores the full breakdown. The first sighting
+  of an ad raises one `ad_library` signal.
+
+  **The Ad Library API can't see Canadian commercial ads**, so the only real
+  source today is a manual CSV import. See the `MUSE.md` provider log.
+- **Provenance:** every signal records `ingested_via`: `webhook`, `poller`,
+  `manual_import`, `simulator`, or `seed`.
 
 ## Dashboard
 

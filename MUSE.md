@@ -171,10 +171,12 @@ difference.
 
 | Date | Change | Reason |
 |---|---|---|
-| — | — | — |
+| 2026-10-17 | Competitor research: **Meta Ad Library API → mock source (dev) + manual CSV import** from the public Ad Library website | The Ad Library API returns only political/issue ads, plus commercial ads delivered in the EU/UK. Canadian competitors' commercial ads are visible on the website but not via the API. Cost: none. Quality: needs a person (or a future approved tool) to copy sightings; owner to decide on any paid third-party source. |
 
 ## Current build phase
 
-**Development / mock mode.** Every external integration (Meta, TikTok,
+**Phase 2 (signals ingestion) built in mock mode.** The webhook receiver verifies real Meta
+signatures, but only simulated deliveries have been sent so far (no Meta app yet).
+Every external integration (Meta, TikTok,
 ElevenLabs, Twilio, Higgsfield, Google Calendar, Telegram/Slack, Anthropic API)
 is stubbed. No real API keys, no real ad spend, no real calls.

@@ -23,8 +23,8 @@ are no real keys, no ad spend, and no calls.
 | Phase | What | State |
 |---|---|---|
 | 0 | Scaffold, secrets template, operating rules | Done |
-| 1 | System of record (Postgres schema + seed) | Next |
-| — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Planned |
+| 1 | System of record (Postgres schema + seed + gate test) | Done |
+| — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Next |
 | 2–8 | Signals, brain + approvals, paid ads loop, callbacks, attribution, interrupts, hardening | Later |
 
 ## Layout
@@ -41,6 +41,25 @@ src/api/                Webhook receivers, approval endpoints
 src/lib/                Idempotency, spend-cap, logging helpers
 tests/                  One test per phase gate
 ```
+
+## Run it locally
+
+Requirements: Node 20 or newer, and Postgres 16 on `localhost:5432`.
+
+```bash
+npm install
+cp .env.example .env     # optional: set DATABASE_URL
+npm run db:reset         # drop, migrate from empty, seed mock data
+npm test                 # Phase 1 gate: fresh-DB migrate + seed, idempotency + guardrail checks
+npm run typecheck
+```
+
+If `DATABASE_URL` is unset, the scripts default to
+`postgres://postgres:postgres@localhost:5432/ai_social_team`. Use that default
+for local development only.
+
+The schema, guardrails, and KPI views are documented in
+[`db/schema.md`](./db/schema.md).
 
 ## Secrets
 

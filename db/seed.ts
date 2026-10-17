@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
+import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 import { classifyVariant, type VariantCycleStats } from "../src/lib/classify.ts";
 
 // ---------------------------------------------------------------------------
@@ -1007,6 +1008,7 @@ function buildPendingQueue(adIds: Map<string, string>, variantIds: Map<string, s
 // ---------------------------------------------------------------------------
 
 export async function seed(url = databaseUrl()): Promise<Record<string, number>> {
+  assertLocalDatabase(url, "db:seed");
   build();
   const client = newClient(url);
   await client.connect();

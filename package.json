@@ -10,7 +10,8 @@
     "db:seed": "tsx db/seed.ts",
     "db:reset": "tsx db/migrate.ts --reset && tsx db/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "db:create-dashboard-login": "tsx db/create-dashboard-login.ts"
   },
   "dependencies": {
     "pg": "^8.23.1"

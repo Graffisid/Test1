@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { StatusChip } from "@/components/StatusChip";
 import { KIND_LABEL, SERVICE_LABEL, dateTime, longDate, money, pct, relative, seconds } from "@/lib/format";
+import { requireOwnerPage } from "@/lib/session";
 import { expireStaleApprovals, getDigest } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ function shiftDay(day: string, by: number): string {
  * Every number comes straight from v_daily_kpis / the base tables so it reconciles by hand.
  */
 export default async function DigestPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
+  await requireOwnerPage();
   const { date } = await searchParams;
   await expireStaleApprovals();
   const dg = await getDigest(date ?? null);

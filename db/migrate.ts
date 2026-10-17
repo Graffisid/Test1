@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
+import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "migrations");
 
@@ -29,6 +30,7 @@ export async function ensureDatabase(url: string): Promise<void> {
 }
 
 export async function migrate(url = databaseUrl(), opts: { reset?: boolean; log?: boolean } = {}): Promise<string[]> {
+  if (opts.reset) assertLocalDatabase(url, "db:reset");
   await ensureDatabase(url);
   const client = newClient(url);
   await client.connect();

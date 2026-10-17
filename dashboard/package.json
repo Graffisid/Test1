@@ -5,7 +5,8 @@
     "dev": "next dev -H 127.0.0.1 -p 3000",
     "build": "next build",
     "start": "next start -H 127.0.0.1 -p 3000",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "security-check": "node scripts/security-check.mjs"
   },
   "dependencies": {
     "next": "^16.4.2",

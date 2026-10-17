@@ -56,6 +56,9 @@ forced onto an ad.
 | "Paid" only after a completed job | `appointments_paid_needs_completed` |
 | Agent names are exactly the eight in `.claude/agents/` | `is_agent_name()` |
 
+| Dashboard can only record decisions, never rewrite data | Role `dashboard_app` (migration 014): `SELECT`, column-level `UPDATE` on approvals and variants, `INSERT` on the log |
+| Audit log can't be edited or deleted, by anyone | Trigger `agent_activity_log_no_update_delete`; the `approval_id` foreign key is `ON DELETE RESTRICT` |
+
 Spend caps (weekly $500, per-ad $40/day, $100/day circuit breaker) are
 enforced in the launch path in `src/lib/` (Phase 4). The seed test checks
 that the mock spend stays under them.

@@ -51,7 +51,7 @@ Requirements: Node 20 or newer, and Postgres 16 on `localhost:5432`.
 npm install
 cp .env.example .env     # optional: set DATABASE_URL
 npm run db:reset         # drop, migrate from empty, seed mock data
-npm test                 # Phase 1 gate: fresh-DB migrate + seed, idempotency + guardrail checks
+npm test                 # Phase 1 gate + security tests (least privilege, append-only log, sessions)
 npm run typecheck
 ```
 
@@ -65,10 +65,17 @@ The schema, guardrails, and KPI views are documented in
 ## Dashboard
 
 ```bash
+# once: least-privilege DB login for the dashboard (never the superuser)
+DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-login
+
 cd dashboard
 npm install
-npm run dev              # http://127.0.0.1:3000 (bound to localhost only; there is no login yet)
+cp .env.example .env.local   # fill in DATABASE_URL, DASHBOARD_PASSWORD, SESSION_SECRET
+npm run build && npm start   # http://127.0.0.1:3000 — owner sign-in required
+npm run security-check       # (in another terminal) 20 HTTP-level security checks
 ```
+
+Security model, threat table and remaining risks: [`SECURITY.md`](./SECURITY.md).
 
 - **Overview (`/`):** the four KPI cards, the approvals queue, and a live
   agent activity feed.

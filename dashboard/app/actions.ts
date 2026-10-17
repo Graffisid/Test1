@@ -11,6 +11,7 @@
  */
 import { revalidatePath } from "next/cache";
 import { pool, OWNER_NAME } from "@/lib/db";
+import { requireOwner } from "@/lib/session";
 
 export interface ActionState {
   ok: boolean;
@@ -34,6 +35,11 @@ async function withPendingApproval<T>(
   fn: (client: import("pg").PoolClient, row: { kind: string; title: string; payload: Record<string, unknown>;
     ad_variant_id: string | null; needs_fact_check: boolean | null }) => Promise<T>,
 ): Promise<T | ActionState> {
+  try {
+    await requireOwner();
+  } catch {
+    return { ok: false, message: "Your session has expired. Sign in again." };
+  }
   if (!UUID.test(id)) return { ok: false, message: "Unknown approval." };
   const client = await pool.connect();
   try {
@@ -62,7 +68,9 @@ async function withPendingApproval<T>(
     return result;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    return { ok: false, message: `Database refused the change: ${(err as Error).message}` };
+    // Details stay in the server log; the browser gets a generic message.
+    console.error("approval action failed", { id, error: (err as Error).message });
+    return { ok: false, message: "The change was refused and nothing was saved. Details are in the server log." };
   } finally {
     client.release();
     revalidatePath("/");

@@ -3,6 +3,7 @@ import { ApprovalCard, type ApprovalView } from "@/components/ApprovalCard";
 import { KpiCard, type Delta } from "@/components/KpiCard";
 import { Sparkline } from "@/components/Sparkline";
 import { OWNER_NAME } from "@/lib/db";
+import { requireOwnerPage } from "@/lib/session";
 import { KIND_LABEL, TZ, dateTime, money, pct, relative, seconds } from "@/lib/format";
 import {
   AGENTS, expireStaleApprovals, getActivity, getKpis, getPendingApprovals, getRecentDecisions, type ApprovalRow,
@@ -29,6 +30,7 @@ function toView(a: ApprovalRow, now: number): ApprovalView {
 }
 
 export default async function Overview() {
+  await requireOwnerPage();
   await expireStaleApprovals();
   const [kpis, pending, decided, activity] = await Promise.all([
     getKpis(), getPendingApprovals(), getRecentDecisions(6), getActivity({ limit: 50 }),
@@ -96,7 +98,9 @@ export default async function Overview() {
             {funnelSteps.map((s) => (
               <li key={s.label}>
                 <span className="funnel-label">{s.label}</span>
-                <span className="funnel-track"><span className="funnel-bar" style={{ width: `${funnel.leads ? (s.n / funnel.leads) * 100 : 0}%` }} /></span>
+                <svg className="funnel-track" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
+                  <rect className="funnel-bar" x="0" y="0" height="8" rx="2" width={funnel.leads ? (s.n / funnel.leads) * 100 : 0} />
+                </svg>
                 <span className="funnel-n">{s.n}</span>
               </li>
             ))}

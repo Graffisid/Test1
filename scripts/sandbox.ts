@@ -17,6 +17,7 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 import { databaseUrl } from "../src/lib/db.ts";
 import { assertLocalDatabase } from "../src/lib/db-guard.ts";
@@ -26,6 +27,12 @@ const DIR = join(ROOT, ".sandbox");
 const keep = process.argv.includes("--keep");
 // Next.js sends anonymous usage telemetry by default; the sandbox makes no outbound calls at all.
 process.env.NEXT_TELEMETRY_DISABLED = "1";
+// On a Mac with Homebrew Postgres the database superuser is your own macOS user (there is no "postgres" role),
+// so a new Terminal window without DATABASE_URL still works. Elsewhere the usual default applies.
+if (!process.env.DATABASE_URL && process.platform === "darwin") {
+  process.env.DATABASE_URL = `postgres://${encodeURIComponent(userInfo().username)}@localhost:5432/ai_social_team`;
+  console.log(`sandbox: DATABASE_URL not set — using your Mac's local database as ${userInfo().username}.`);
+}
 const adminUrl = databaseUrl();
 assertLocalDatabase(adminUrl, "sandbox");
 

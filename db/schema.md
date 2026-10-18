@@ -45,6 +45,9 @@ forced onto an ad.
 | `media_assets` | A generated video or voiceover for a variant, with provider, voice, cost, and status | `media:<variant>:<kind>` |
 | `cycle_reports` | The analyst's 48 h cycle report: verdicts, winner, proposal | — (`UNIQUE(cycle_key)`) |
 | `suppression_list` | Do-not-contact numbers (E.164); the CASL trigger refuses calls to them | — (`UNIQUE(phone_e164)`) |
+| `integrations` | One outside service (Facebook & Instagram, Twilio, ElevenLabs, Google Calendar, …), its mode, and the owner's on/off switch | — (`key` primary key) |
+| `messages` | One text message to or from a lead (append-only) | `sms:<lead>:<step>` for outbound, **NOT NULL** when outbound |
+| `quotes` | The price a lead was texted (from the MUSE.md price list), the times offered, the time chosen | `quote:<lead>`, plus `UNIQUE(lead_id)` |
 | `metrics` | Daily platform numbers per variant: spend, impressions, clicks, platform leads | — (`UNIQUE(metric_date, ad_variant_id)`) |
 | `agent_activity_log` | Every agent decision and every outbound action | Set for outbound actions |
 
@@ -70,6 +73,9 @@ forced onto an ad.
 | Agents request approvals, never decide them | Role `brain_app` (migration 016): column-level `INSERT` on approvals and ad_variants without status or decision columns |
 | Spend caps can't be exceeded | Trigger `ads_spend_cap` (per-ad, circuit breaker, weekly projection via `projected_week_spend()`, freeze) on every launch and increase; budgets change only through `launch_ad` / `apply_budget_change` / `kill_variant`, which re-verify a human approval |
 | CASL: consent, opt-out, do-not-contact | Trigger `calls_consent_check` (consent stored, not withdrawn, number not suppressed); `withdraw_consent()`; leads carry `consent_withdrawn_at`, `phone_e164`, `capture_token_id` (one lead per link), `big_deal` |
+| Owner switches are real | Triggers on `publications`, `calls`, `messages`, `appointments` call `require_integration()`; agents check `integration_on()` first (migration 019) |
+| CASL for texts, template-only texts | Trigger `messages_consent_check`; `messages_outbound_keyed`; append-only `messages_no_rewrite`; `record_inbound_sms()` (STOP opts out) |
+| Bookings need the owner | Customer-picked times are `appointments.status = 'pending_owner'`; `approvals.kind = 'booking'`; trigger `approvals_voice_booking_only` |
 | Signal provenance is never hidden | `signals.ingested_via` ∈ webhook / poller / manual_import / simulator / seed |
 | Audit log can't be edited or deleted, by anyone | Trigger `agent_activity_log_no_update_delete`; the `approval_id` foreign key is `ON DELETE RESTRICT` |
 

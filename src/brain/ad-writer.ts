@@ -21,7 +21,7 @@ export interface WriteAdsOptions {
 }
 
 export interface WriteAdsResult {
-  status: "queued" | "already_ran" | "invalid_output" | "budget_blocked" | "ad_not_found";
+  status: "queued" | "already_ran" | "invalid_output" | "budget_blocked" | "ad_not_found" | "connection_off";
   generated: number;
   rejected: number;
   flagged: number;
@@ -51,6 +51,8 @@ export async function writeAdVariants(db: pg.ClientBase, llm: StructuredLlm, adI
   const { rows: [ad] } = await db.query<{ id: string; name: string; service: string; objective: string; platform: string }>(
     `SELECT id, name, service, objective, platform FROM ads WHERE id = $1`, [adId]);
   if (!ad) return { status: "ad_not_found", ...empty };
+  const { rows: [ai] } = await db.query<{ on: boolean }>(`SELECT integration_on('anthropic') AS on`);
+  if (!ai.on) return { status: "connection_off", ...empty }; // the owner switched the AI off in Connections
 
   const cycleKey = opts.cycleKey ?? new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
   const runKey = `adwriter:${ad.id}:${cycleKey}`;

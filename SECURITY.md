@@ -38,6 +38,11 @@ either closed and tested, or written down below with its mitigation.
 | Calling twice / double booking | The call row (unique key per lead and attempt) is committed **before** dialling, with at most 2 attempts. Bookings are unique per lead, and there's one lead per capture link. Resubmits, re-polls, and duplicate NOTIFYs are all tested. | `tests/phase5-callback.test.ts` |
 | Abuse of the public capture form | Links are signed (HMAC) and expire. The form has a honeypot, per-IP rate limiting, an 8 KB body cap, server-side validation, and output escaping. The CSP is `default-src 'none'` (no scripts at all), with `Referrer-Policy: no-referrer` so link tokens don't leak. | `tests/phase5-callback.test.ts` |
 | Off-script replies | lead-qualifier can only send `MUSE.md` templates. The final text is checked against the template before sending, there's one reply per comment, and anger is refused by the database. | `tests/phase5-callback.test.ts` |
+| A connection doing something after the owner switched it off | Each connection has an owner switch (Connections page). Off is enforced by the database, for every role: publishing needs Facebook & Instagram, calls need phone + voice, texts need the phone, bookings need a calendar. Agents check first and wait politely; the database refuses anyway. The dashboard can flip the switch and nothing else, and a "not set up" connection can't be switched on. Every flip is logged. | `tests/phase5b-texting-connections.test.ts` |
+| Texting without consent, or off-script (CASL) | Same database rule as calls: consent stored, not withdrawn, number not suppressed. Every outbound text needs a unique key and an approved template key; the text is checked against the MUSE.md template before it is recorded, then sent. Prices come only from the MUSE.md price list. Replies are read with narrow rules; anything unclear goes to the owner. STOP withdraws consent at once. Texts are append-only. | `tests/phase5b-texting-connections.test.ts` |
+| An agent confirming a booking | A customer's chosen time is only *held* (`pending_owner`). Confirming is an owner approval; the phone assistant may request booking confirmations and nothing else, and can't decide them. | `tests/phase5b-texting-connections.test.ts` |
+| Forged inbound texts | `POST /webhooks/sms` checks Twilio's `X-Twilio-Signature` (HMAC over the exact URL and parameters, constant-time) before storing anything. The receiver can't read leads; `record_inbound_sms()` matches the sender. | `tests/phase5b-texting-connections.test.ts` |
+| The demo phone being used outside the sandbox | It refuses to start unless `DEMO_MODE=1` and `MOCK_MODE=mock`, binds 127.0.0.1, has a read-only role (`demo_app`), sends only signed webhooks like the real services, checks `Sec-Fetch-Site`/`Origin` on its forms, and serves no scripts. | `tests/phase5b-texting-connections.test.ts` |
 | Guardrail bypass (spending, calling, auto-replying) | Enforced in the database, not only in prompts: CASL consent trigger, human-only approval deciders, no agent replies to angry comments, unique idempotency keys. | `tests/phase1-system-of-record.test.ts` |
 
 ## Running securely
@@ -52,7 +57,7 @@ DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-logi
 #    SESSION_SECRET=<openssl rand -base64 48>
 
 # 3. Verify
-npm test                                   # root: 129 tests incl. security and Phases 2–5
+npm test                                   # root: 145 tests incl. security, Phases 2–5, texting and connections
 cd dashboard && npm run build && npm start
 npm run security-check                     # in another terminal: 20 HTTP-level checks
 ```

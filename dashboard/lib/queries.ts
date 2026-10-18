@@ -1,5 +1,6 @@
 import "server-only";
 import { q } from "./db";
+import { SERVICE_LABEL } from "./format";
 
 const TODAY = `(now() AT TIME ZONE 'America/Toronto')::date`;
 
@@ -99,12 +100,13 @@ export interface ApprovalRow {
   ad_name: string | null;
   variant_label: string | null;
   needs_fact_check: boolean | null;
+  lead_id: string | null;
 }
 
 const APPROVAL_COLS = `
   a.id, a.kind, a.title, a.summary, a.payload, a.original_payload, a.requested_by_agent, a.status, a.edited,
   a.edited_at, a.decided_by, a.decided_at, a.decision_note, a.expires_at, a.created_at, a.spend_delta_cad,
-  ad.name AS ad_name, v.label AS variant_label, v.needs_fact_check`;
+  ad.name AS ad_name, v.label AS variant_label, v.needs_fact_check, a.lead_id`;
 
 /** Pending approvals past their deadline become 'expired' — never approved by silence. */
 export async function expireStaleApprovals(): Promise<void> {
@@ -121,7 +123,7 @@ export async function getPendingApprovals(): Promise<ApprovalRow[]> {
   return q<ApprovalRow>(`
     SELECT ${APPROVAL_COLS} FROM approvals a
     LEFT JOIN ads ad ON ad.id = a.ad_id LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
-    WHERE a.status = 'pending' ORDER BY a.created_at ASC`);
+    WHERE a.status = 'pending' ORDER BY (a.kind = 'booking') DESC, a.created_at ASC`);
 }
 
 export async function getRecentDecisions(limit = 8): Promise<ApprovalRow[]> {
@@ -229,3 +231,187 @@ export async function getDigest(date: string | null): Promise<Digest> {
 
 export const AGENTS = ["growth-director", "triage", "ad-writer", "media-producer", "lead-qualifier",
   "voice-dispatcher", "analyst", "reputation-guard", "owner", "system"] as const;
+
+// --------------------------------------------------------- Connections ----
+
+export interface Integration {
+  key: string; name: string; category: string; purpose: string; used_by: string; when_off: string;
+  mode: "simulated" | "live" | "not_set_up"; enabled: boolean; changed_by: string | null; changed_at: string | null;
+}
+
+export async function getIntegrations(): Promise<Integration[]> {
+  return q<Integration>(`
+    SELECT key, name, category, purpose, used_by, when_off, mode, enabled, changed_by, changed_at
+    FROM integrations ORDER BY sort, name`);
+}
+
+export interface ScheduleItem { at: string | null; kind: "publish" | "post" | "visit" | "hold"; title: string; detail: string; href?: string }
+
+/** What the team will do next, in time order: posts going out, visits on the calendar. */
+export async function getSchedule(): Promise<ScheduleItem[]> {
+  const toPublish = await q<{ title: string; kind: string; decided_at: string }>(`
+    SELECT a.title, a.kind, a.decided_at FROM approvals a LEFT JOIN publications p ON p.approval_id = a.id
+    WHERE a.status = 'approved' AND p.id IS NULL AND a.kind IN ('ad_variant','organic_post','reputation_reply')
+    ORDER BY a.decided_at LIMIT 10`);
+  const posts = await q<{ title: string; scheduled_for: string | null; channel: string | null }>(`
+    SELECT title, payload->>'scheduled_for' AS scheduled_for, payload->>'channel' AS channel
+    FROM approvals WHERE status = 'pending' AND kind = 'organic_post' ORDER BY created_at LIMIT 10`);
+  const visits = await q<{ id: string; lead_id: string; name: string; service: string; scheduled_for: string; status: string }>(`
+    SELECT ap.id, ap.lead_id, l.name, ap.service, ap.scheduled_for, ap.status FROM appointments ap JOIN leads l ON l.id = ap.lead_id
+    WHERE ap.status IN ('scheduled','pending_owner') AND ap.scheduled_for >= now() AND ap.scheduled_for < now() + interval '14 days'
+    ORDER BY ap.scheduled_for LIMIT 12`);
+  return [
+    ...toPublish.map((a) => ({ at: null, kind: "publish" as const, title: a.title,
+      detail: "Approved — goes out on the publisher's next run (a few seconds in the sandbox)" })),
+    ...posts.map((p) => ({ at: null, kind: "post" as const, title: p.title,
+      detail: `${p.channel ? `${p.channel.replace("_", " ")} · ` : ""}${p.scheduled_for ? `planned for ${p.scheduled_for}` : "no time set"} — needs your OK first` })),
+    ...visits.map((v) => ({ at: v.scheduled_for, kind: v.status === "pending_owner" ? "hold" as const : "visit" as const,
+      title: `${v.name} — ${SERVICE_LABEL[v.service] ?? v.service}`,
+      detail: v.status === "pending_owner" ? "Held for the customer — waiting for your OK" : "Booked visit", href: `/customers/${v.lead_id}` })),
+  ];
+}
+
+export async function getNextAdCycle(): Promise<string | null> {
+  const [r] = await q<{ next: string | null }>(`SELECT (max(created_at) + interval '48 hours')::text AS next FROM cycle_reports`);
+  return r?.next ?? null;
+}
+
+// ----------------------------------------------------------- Customers ----
+
+export interface CustomerRow {
+  id: string; name: string; service_requested: string; contact_pref: string; status: string; created_at: string;
+  ad_name: string | null; source: string | null; quote_status: string | null; appt_status: string | null; scheduled_for: string | null;
+  calls: number; texts: number;
+}
+
+export async function getCustomers(limit = 60): Promise<CustomerRow[]> {
+  return q<CustomerRow>(`
+    SELECT l.id, l.name, l.service_requested, l.contact_pref, l.status, l.created_at, ad.name AS ad_name, s.source,
+           qt.status AS quote_status, ap.status AS appt_status, ap.scheduled_for,
+           (SELECT count(*) FROM calls c WHERE c.lead_id = l.id)::int AS calls,
+           (SELECT count(*) FROM messages m WHERE m.lead_id = l.id)::int AS texts
+    FROM leads l
+    LEFT JOIN ads ad ON ad.id = l.ad_id
+    LEFT JOIN comments cm ON cm.id = l.comment_id
+    LEFT JOIN signals s ON s.id = COALESCE(cm.signal_id, l.signal_id)
+    LEFT JOIN quotes qt ON qt.lead_id = l.id
+    LEFT JOIN LATERAL (SELECT status, scheduled_for FROM appointments a WHERE a.lead_id = l.id ORDER BY a.created_at DESC LIMIT 1) ap ON true
+    ORDER BY l.created_at DESC LIMIT $1`, [limit]);
+}
+
+export interface AuditEvent { at: string; actor: string; title: string; detail?: string | null; ref?: string | null; tone?: "customer" | "agent" | "owner" | "system" | "alert" }
+
+export interface CustomerAudit {
+  lead: {
+    id: string; name: string; phone: string | null; phone_e164: string | null; city: string | null; service_requested: string; status: string;
+    contact_pref: string; created_at: string; consent_given: boolean; consent_at: string | null; consent_text: string | null;
+    consent_source: string | null; consent_withdrawn_at: string | null; capture_token_id: string | null; big_deal: boolean;
+    estimated_value_cad: number | null; idempotency_key: string;
+  };
+  source: { platform: string | null; kind: string | null; ad_name: string | null; variant_label: string | null; headline: string | null;
+    post_id: string | null; published_at: string | null; comment: string | null; commented_at: string | null; author: string | null } | null;
+  quote: { service: string; price_cad: number | null; price_basis: string; status: string; chosen_slot: string | null } | null;
+  appointment: { status: string; scheduled_for: string; calendar_event_id: string | null } | null;
+  events: AuditEvent[];
+}
+
+const platformName = (p: string | null) => (p === "instagram" ? "Instagram" : "Facebook");
+
+export async function getCustomerAudit(id: string): Promise<CustomerAudit | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const [lead] = await q<CustomerAudit["lead"] & { comment_id: string | null; signal_id: string | null }>(`
+    SELECT id, name, phone, phone_e164, city, service_requested, status, contact_pref, created_at, consent_given, consent_at, consent_text,
+           consent_source, consent_withdrawn_at, capture_token_id, big_deal, estimated_value_cad, idempotency_key, comment_id, signal_id
+    FROM leads WHERE id = $1`, [id]);
+  if (!lead) return null;
+
+  const [src] = await q<NonNullable<CustomerAudit["source"]> & { comment_signal_id: string | null; comment_id: string | null;
+    intent: string | null; replied_at: string | null; reply_text: string | null; received_at: string | null; ingested_via: string | null;
+    form_signal_at: string | null; triaged_at: string | null }>(`
+    SELECT s.payload->>'platform' AS platform, s.source AS kind, ad.name AS ad_name, v.label AS variant_label, v.headline,
+           s.payload->>'post_id' AS post_id, p.published_at, cm.body AS comment, cm.created_at AS commented_at,
+           COALESCE(s.payload->>'author_name', cm.author_handle) AS author, cm.signal_id AS comment_signal_id, cm.id AS comment_id,
+           cm.intent, cm.replied_at, cm.reply_text, s.received_at, s.ingested_via, fs.received_at AS form_signal_at, s.processed_at AS triaged_at
+    FROM leads l
+    LEFT JOIN comments cm ON cm.id = l.comment_id
+    LEFT JOIN signals s ON s.id = COALESCE(cm.signal_id, l.signal_id)
+    LEFT JOIN signals fs ON fs.id = l.signal_id
+    LEFT JOIN ads ad ON ad.id = COALESCE(l.ad_id, cm.ad_id)
+    LEFT JOIN ad_variants v ON v.id = COALESCE(l.ad_variant_id, cm.ad_variant_id)
+    LEFT JOIN LATERAL (SELECT published_at FROM publications p WHERE p.target_id = v.id AND p.kind = 'ad_variant'
+                       AND p.external_ref = s.payload->>'post_id' ORDER BY published_at DESC LIMIT 1) p ON true
+    WHERE l.id = $1`, [id]);
+
+  const [quote] = await q<NonNullable<CustomerAudit["quote"]>>(
+    `SELECT service, price_cad, price_basis, status, chosen_slot FROM quotes WHERE lead_id = $1`, [id]);
+  const [appointment] = await q<NonNullable<CustomerAudit["appointment"]>>(
+    `SELECT status, scheduled_for, calendar_event_id FROM appointments WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]);
+  const messages = await q<{ id: string; direction: string; body: string; sent_at: string; template_key: string | null; provider_message_id: string | null }>(
+    `SELECT id, direction, body, sent_at, template_key, provider_message_id FROM messages WHERE lead_id = $1 ORDER BY sent_at, created_at`, [id]);
+  const calls = await q<{ attempt: number; started_at: string; outcome: string; duration_s: number | null; transcript_summary: string | null; idempotency_key: string }>(
+    `SELECT attempt, started_at, outcome, duration_s, transcript_summary, idempotency_key FROM calls WHERE lead_id = $1 ORDER BY attempt`, [id]);
+  const approvals = await q<{ id: string; title: string; status: string; created_at: string; decided_by: string | null; decided_at: string | null; decision_note: string | null }>(
+    `SELECT id, title, status, created_at, decided_by, decided_at, decision_note FROM approvals WHERE lead_id = $1 ORDER BY created_at`, [id]);
+  const logIds = [id, src?.comment_id, src?.comment_signal_id, lead.signal_id, ...approvals.map((a) => a.id)].filter(Boolean);
+  const logs = await q<{ occurred_at: string; agent: string; action: string; decision: string | null; status: string; idempotency_key: string | null }>(`
+    SELECT occurred_at, agent, action, decision, status, idempotency_key FROM agent_activity_log
+    WHERE entity_id = ANY($1::uuid[]) OR approval_id = ANY($1::uuid[])
+    ORDER BY occurred_at, created_at`, [logIds]);
+
+  const events: AuditEvent[] = [];
+  if (src?.published_at && src.headline) {
+    events.push({ at: src.published_at, actor: "System", tone: "system", title: `Ad published on ${platformName(src.platform)}`,
+      detail: `${src.ad_name ?? "Ad"} — variant ${src.variant_label}: “${src.headline}”`, ref: src.post_id ? `post ${src.post_id}` : null });
+  }
+  if (src?.comment && src.commented_at) {
+    events.push({ at: src.received_at ?? src.commented_at, actor: src.author ?? "Customer", tone: "customer",
+      title: `Commented on the ${platformName(src.platform)} post`, detail: `“${src.comment}”`,
+      ref: `received via ${src.ingested_via ?? "webhook"} (signed)` });
+  }
+  // Agent and owner actions, in their own words (the reply, the quote, each text, the booking, the decision).
+  const ACTOR: Record<string, string> = { triage: "Inbox sorter", "lead-qualifier": "Lead catcher", "voice-dispatcher": "Phone assistant",
+    "growth-director": "Team manager", owner: "You", system: "System", analyst: "Analyst", "ad-writer": "Ad writer",
+    "media-producer": "Video studio", "reputation-guard": "Review guard" };
+  for (const l of logs) {
+    if (l.action === "send_capture_link") continue; // shown below with the reply's actual words
+    events.push({ at: l.occurred_at, actor: ACTOR[l.agent] ?? l.agent, title: l.decision ?? l.action.replaceAll("_", " "),
+      tone: l.agent === "owner" ? "owner" : l.status === "ok" ? "agent" : "alert", ref: l.idempotency_key });
+  }
+  if (src?.reply_text && src.replied_at) {
+    events.push({ at: src.replied_at, actor: "Lead catcher", tone: "agent", title: "Public reply posted under the comment",
+      detail: `“${src.reply_text.replace(/https?:\/\/\S+/, "[personal quote link]")}”` });
+  }
+  events.push({ at: lead.created_at, actor: lead.name, tone: "customer", title: "Filled in the quote form",
+    detail: `${lead.consent_given ? "Ticked the consent box. " : ""}Asked to be ${lead.contact_pref === "text" ? "texted" : "called"}.`,
+    ref: lead.capture_token_id ? `link ${lead.capture_token_id.slice(0, 8)} (one use)` : lead.idempotency_key });
+  for (const m of messages) {
+    events.push({ at: m.sent_at, actor: m.direction === "inbound" ? lead.name : "Phone assistant",
+      tone: m.direction === "inbound" ? "customer" : "agent",
+      title: m.direction === "inbound" ? "Texted back" : `Sent a text (${m.template_key})`, detail: `“${m.body}”`, ref: m.provider_message_id });
+  }
+  for (const c of calls) {
+    events.push({ at: c.started_at, actor: "Phone assistant", tone: "agent", title: `Called — attempt ${c.attempt}: ${c.outcome.replaceAll("_", " ")}`,
+      detail: c.transcript_summary, ref: c.idempotency_key });
+  }
+  // Owner decisions are already in the log. An expiry has no actor, so it is added here.
+  const expired = await q<{ id: string; updated_at: string }>(
+    `SELECT id, updated_at FROM approvals WHERE lead_id = $1 AND status = 'expired'`, [id]);
+  for (const a of expired) {
+    events.push({ at: a.updated_at, actor: "System", tone: "alert", title: "Booking request expired — nobody decided in time",
+      ref: `approval ${a.id.slice(0, 8)}` });
+  }
+  events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+  return {
+    lead, quote: quote ?? null, appointment: appointment ?? null, events,
+    source: src ? { platform: src.platform, kind: src.kind, ad_name: src.ad_name, variant_label: src.variant_label, headline: src.headline,
+      post_id: src.post_id, published_at: src.published_at, comment: src.comment, commented_at: src.commented_at, author: src.author } : null,
+  };
+}
+
+// ------------------------------------------------------- Notifications ----
+
+export async function getNewApprovals(sinceIso: string): Promise<{ id: string; kind: string; title: string; created_at: string }[]> {
+  return q(`SELECT id, kind, title, created_at FROM approvals WHERE status = 'pending' AND created_at > $1::timestamptz
+            ORDER BY created_at LIMIT 5`, [sinceIso]);
+}

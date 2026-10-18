@@ -39,9 +39,17 @@ const capture = captureUrl ? {
   trustProxy: process.env.TRUST_PROXY === "1",
 } : undefined;
 
+// Inbound texts (Twilio), enabled when the auth token is configured.
+const smsToken = process.env.TWILIO_AUTH_TOKEN;
+const sms = smsToken ? {
+  authToken: required("TWILIO_AUTH_TOKEN", 16),
+  publicUrl: `${(process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3001").replace(/\/$/, "")}/webhooks/sms`,
+} : undefined;
+
 const server = createIngestServer({
   pool,
   capture,
+  sms,
   appSecret: required("META_APP_SECRET", 16),
   verifyToken: required("META_WEBHOOK_VERIFY_TOKEN", 16),
   ownIds: new Set([process.env.META_PAGE_ID, process.env.META_INSTAGRAM_ACCOUNT_ID].filter((x): x is string => !!x)),

@@ -65,6 +65,30 @@ export function replyTemplates(md = readMuse()): ReplyTemplate[] {
   });
 }
 
+export interface PriceListEntry { service: string; label: string; priceCad: number | null; basis: "fixed" | "service_call" | "in_home_estimate" }
+
+/** The only prices the phone assistant may quote (MUSE.md "Quote price list"). */
+export function priceList(md = readMuse()): PriceListEntry[] {
+  const sec = section(md, "Quote price list");
+  return sec.split("\n").filter((l) => /^\|\s*`/.test(l)).map((l) => {
+    const [service, label, price, basis] = l.split("|").slice(1, 5).map((c) => c.trim());
+    const b = basis as PriceListEntry["basis"];
+    if (!["fixed", "service_call", "in_home_estimate"].includes(b)) throw new Error(`MUSE.md price list: unknown basis "${basis}"`);
+    return { service: service.replace(/`/g, ""), label, priceCad: /^\d+(\.\d+)?$/.test(price) ? Number(price) : null, basis: b };
+  });
+}
+
+export interface TextTemplate { key: string; when: string; text: string }
+
+/** Owner-approved text messages (MUSE.md "Approved text messages"). */
+export function textTemplates(md = readMuse()): TextTemplate[] {
+  const sec = section(md, "Approved text messages");
+  return sec.split("\n").filter((l) => /^\|\s*`/.test(l)).map((l) => {
+    const [key, when, text] = l.split("|").slice(1, 4).map((c) => c.trim());
+    return { key: key.replace(/`/g, ""), when, text };
+  });
+}
+
 /** Big-deal threshold in CAD, from MUSE.md. */
 export function bigDealThresholdCad(md = readMuse()): number {
   const m = /\*\*Big-deal threshold:\*\*[^$]*\$([\d,]+)/.exec(md);

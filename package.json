@@ -26,6 +26,9 @@
     "ads:sync-insights": "tsx workflows/sync-insights.ts",
     "ads:cycle": "tsx workflows/ad-cycle-48h.ts",
     "leads:qualify": "tsx workflows/qualify-leads.ts",
+    "texts:agent": "tsx workflows/text-agent.ts",
+    "agents:loop": "tsx workflows/agent-loop.ts",
+    "demo:phone": "tsx src/demo/server.ts",
     "voice:dispatcher": "tsx workflows/voice-dispatcher.ts"
   },
   "dependencies": {

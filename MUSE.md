@@ -173,6 +173,36 @@ replaced by a personal capture link. Anything a template doesn't cover goes to a
 |---|---|---|
 | `capture-v1` | buying_intent, question | Thanks for reaching out! Pop your number in here and a Northshore team member will call you within a minute: {link} |
 
+## Quote price list
+
+> Fictional prices, owner-confirmed **for the sandbox only**. Replace with real prices before go-live.
+> The phone assistant may quote **only** these. Anything else gets a free in-home visit, never a guess.
+
+| Service key | Service | Price (CAD) | Basis |
+|---|---|---|---|
+| `furnace_tuneup` | Furnace tune-up | 149 | fixed |
+| `drain_cleaning` | Drain cleaning | 189 | fixed |
+| `emergency_plumbing` | Emergency plumbing visit | 129 | service_call |
+| `water_heater` | Water heater replacement | — | in_home_estimate |
+| `furnace_replacement` | New furnace | — | in_home_estimate |
+| `heat_pump` | Heat pump install | — | in_home_estimate |
+
+## Approved text messages
+
+The phone assistant texts **only** these, word for word, filling in the `{placeholders}`. A reply it doesn't
+understand goes to the owner; it never improvises. Every text identifies the business and says how to opt out.
+
+| Key | When | Text |
+|---|---|---|
+| `quote-fixed-v1` | Lead asked to be texted; service has a fixed price | Hi {first_name}, it's Northshore Plumbing & Heating. Thanks for reaching out! A {service} is ${price} + HST, done by a licensed tech. Want to book a visit? Reply YES and we'll send you times. Reply STOP to opt out. |
+| `quote-call-v1` | Service is priced as a service call | Hi {first_name}, it's Northshore Plumbing & Heating. Thanks for reaching out! Our {service} starts with a ${price} service call; parts and labour are quoted on site before any work. Want to book? Reply YES and we'll send you times. Reply STOP to opt out. |
+| `quote-visit-v1` | Service needs an in-home estimate | Hi {first_name}, it's Northshore Plumbing & Heating. Thanks for reaching out! For a {service} we give a free in-home quote. Want us to come by? Reply YES and we'll send you times. Reply STOP to opt out. |
+| `slots-v1` | Customer replied YES | Great! Here are our next openings: 1) {slot1} 2) {slot2} 3) {slot3}. Reply 1, 2 or 3 to pick a time. |
+| `hold-v1` | Customer picked a time | Perfect, we've pencilled you in for {slot}. We'll text you as soon as it's confirmed. |
+| `confirmed-v1` | Owner confirmed the booking | You're booked! {service} on {slot} at your place. A licensed Northshore tech will text when they're on the way. Reply STOP to opt out. |
+| `reschedule-v1` | Owner declined the time, or it expired | Sorry {first_name}, that time no longer works on our side. Someone from Northshore will call you today to find a better one. |
+| `declined-v1` | Customer replied NO | No problem at all, {first_name}. If anything changes, just text us back. Reply STOP to opt out. |
+
 ## Agent roster
 
 | Agent | Owns | Never allowed to |
@@ -182,7 +212,7 @@ replaced by a personal capture link. Anything a template doesn't cover goes to a
 | `ad-writer` | Ad variants and organic drafts (status `draft`) | Invent a claim, price, or testimonial; publish |
 | `media-producer` | Video and voiceover assets for approved scripts | Keep burning credits after the cost threshold or repeated failures |
 | `lead-qualifier` | Buying-intent signal → consented phone number | Improvise sales talk; use non-template replies |
-| `voice-dispatcher` | **Lead callbacks** (60-second call) | Call without consent; call a lead twice for the same event |
+| `voice-dispatcher` | **Lead callbacks** (60-second call) and **quote texts** (book by text) | Call or text without consent; call a lead twice for the same event; text anything but an approved template; confirm a booking itself (the owner confirms) |
 | `analyst` | Scoring, winner/loser classification, attribution | Make a reallocation itself (it can only recommend one) |
 | `reputation-guard` | Review and mention monitoring, reply drafts | Publish anything (it has no publish tool); auto-reply to anger |
 
@@ -214,6 +244,9 @@ Phase 4 (paid ads loop) runs on a simulated ad platform and simulated media: no 
 credits are used. The spend caps above are enforced by the database (`spend_caps`, migration 017).
 Phase 5 (lead capture + 60-second callback) runs with a simulated voice agent and calendar: no real
 call is placed. The consent wording below is a DRAFT until reviewed.
+Customers can also choose to be **texted** a quote and book by text; the owner confirms every booking. Texts
+are simulated. Each outside service has an owner on/off switch (dashboard → Connections), enforced by the
+database.
 Every external integration (Meta, TikTok,
 ElevenLabs, Twilio, Higgsfield, Google Calendar, Telegram/Slack, Anthropic API)
 is stubbed. No real API keys, no real ad spend, no real calls.

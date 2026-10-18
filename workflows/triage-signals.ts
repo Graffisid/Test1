@@ -12,6 +12,8 @@ import { newClient } from "../src/lib/db.ts";
 
 export async function triagePending(db: pg.ClientBase, llm: StructuredLlm, limit = 50): Promise<TriageResult[]> {
   const results: TriageResult[] = [];
+  const { rows: [ai] } = await db.query<{ on: boolean }>(`SELECT integration_on('anthropic') AS on`);
+  if (!ai.on) return results; // switched off in Connections: new signals wait, unsorted
   for (let i = 0; i < limit; i++) {
     await db.query("BEGIN");
     try {

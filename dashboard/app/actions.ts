@@ -75,6 +75,45 @@ async function withPendingApproval<T>(
     client.release();
     revalidatePath("/");
     revalidatePath("/digest");
+    revalidatePath("/customers", "layout");
+  }
+}
+
+/** The owner's on/off switch for a connection. Off is enforced by the database for every agent. */
+export async function toggleConnectionAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
+  try {
+    await requireOwner();
+  } catch {
+    return { ok: false, message: "Your session has expired. Sign in again." };
+  }
+  const key = String(form.get("key") ?? "");
+  const on = form.get("on") === "1";
+  if (!/^[a-z_]{2,40}$/.test(key)) return { ok: false, message: "Unknown connection." };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: [row] } = await client.query<{ name: string; mode: string; enabled: boolean }>(
+      `SELECT name, mode, enabled FROM integrations WHERE key = $1 FOR UPDATE`, [key]);
+    if (!row) { await client.query("ROLLBACK"); return { ok: false, message: "Unknown connection." }; }
+    if (on && row.mode === "not_set_up") {
+      await client.query("ROLLBACK");
+      return { ok: false, message: `${row.name} isn't set up yet, so it can't be switched on.` };
+    }
+    if (row.enabled === on) { await client.query("ROLLBACK"); return { ok: true, message: `${row.name} is already ${on ? "on" : "off"}.` }; }
+    await client.query(`UPDATE integrations SET enabled = $2, changed_by = $3, changed_at = now() WHERE key = $1`, [key, on, OWNER_NAME]);
+    await client.query(
+      `INSERT INTO agent_activity_log (agent, department, action, decision, status)
+       VALUES ('owner', 'orchestration', $1, $2, $3)`,
+      [on ? "connection_on" : "connection_off", `Switched ${on ? "on" : "off"}: ${row.name}`, on ? "ok" : "escalated"]);
+    await client.query("COMMIT");
+    return { ok: true, message: on ? `${row.name} is back on.` : `${row.name} is off. Nothing that needs it will happen until you switch it back on.` };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("toggle connection failed", { key, error: (err as Error).message });
+    return { ok: false, message: "The change was refused and nothing was saved. Details are in the server log." };
+  } finally {
+    client.release();
+    revalidatePath("/connections");
   }
 }
 
@@ -100,7 +139,12 @@ export async function approveAction(_prev: ActionState | null, form: FormData): 
     if (row.ad_variant_id) {
       await client.query(`UPDATE ad_variants SET status = 'approved', needs_fact_check = false WHERE id = $1`, [row.ad_variant_id]);
     }
-    const dept = row.kind === "budget_reallocation" ? "paid_ads" : row.kind === "reputation_reply" ? "reputation" : "publishing";
+    const dept = row.kind === "budget_reallocation" ? "paid_ads" : row.kind === "reputation_reply" ? "reputation"
+      : row.kind === "booking" ? "sales_response" : "publishing";
+    if (row.kind === "booking") {
+      await log(client, "owner", "approve", `Confirmed booking: ${row.title}`, id, "ok", dept);
+      return { ok: true, message: "Confirmed. The customer gets a confirmation text in a few seconds and the visit goes on your calendar (simulated)." };
+    }
     await log(client, "owner", "approve", `Approved: ${row.title}${factChecked ? " (owner verified the flagged claim)" : ""}`, id, "ok", dept);
     await log(client, "system", "publish_deferred",
       row.kind === "budget_reallocation" || row.kind === "ad_launch"
@@ -124,8 +168,10 @@ export async function rejectAction(_prev: ActionState | null, form: FormData): P
       `UPDATE approvals SET status = 'rejected', decided_by = $2, decided_at = now(), decision_note = $3 WHERE id = $1`,
       [id, OWNER_NAME, note]);
     if (row.ad_variant_id) await client.query(`UPDATE ad_variants SET status = 'rejected' WHERE id = $1`, [row.ad_variant_id]);
-    await log(client, "owner", "reject", `Rejected: ${row.title}${note ? ` — "${note}"` : ""}`, id);
-    return { ok: true, message: "Rejected. The publish path can never run for this item." };
+    await log(client, "owner", "reject", `${row.kind === "booking" ? "Declined booking" : "Rejected"}: ${row.title}${note ? ` — "${note}"` : ""}`, id);
+    return { ok: true, message: row.kind === "booking"
+      ? "Declined. The time is released and the customer gets a polite text saying someone will call them."
+      : "Rejected. The publish path can never run for this item." };
   }) as Promise<ActionState>;
 }
 

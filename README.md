@@ -75,28 +75,43 @@ npm run sandbox            # or: npm run sandbox -- --keep  (keeps current data)
 
 This command:
 
-- Resets the **local** database to fresh seed data. It refuses to run against
-  any other host.
+- Resets the **local** database to fresh seed data. It refuses to run against any other host.
 - Creates every least-privilege login with a new random password.
-- Starts three services:
-  - The webhook receiver and capture form, on port 3001.
-  - The voice dispatcher.
-  - The dashboard, at <http://127.0.0.1:3000>.
-- Prints a one-time owner password.
+- Starts:
+  - the dashboard at <http://127.0.0.1:3000> (it prints a one-time owner password),
+  - the **customer's phone** demo at <http://127.0.0.1:3002>,
+  - the webhook receiver and quote form on port 3001,
+  - the AI team: an agent loop (sorting, replies, texts, publishing) and the callback worker.
 
-The passwords and service URLs are written to `.sandbox/`. That folder is
-gitignored and readable only by you. `dashboard/.env.local` is never touched.
-Everything external stays simulated. Ctrl-C stops it all.
+The passwords and service URLs are written to `.sandbox/`. That folder is gitignored and readable only by
+you. `dashboard/.env.local` is never touched. Everything external stays simulated. Ctrl-C stops it all.
 
-To act as the outside world and the agents, open a second terminal:
+**To show a business owner:** open the dashboard's **Demo** page. It is a step-by-step script:
+
+1. Comment on the post on the customer's phone.
+2. Open the link in Northshore's reply and choose "Text me a quote".
+3. Answer the texts.
+4. Confirm the booking on the dashboard.
+5. Open the customer's audit report.
+
+The customer's phone sends signed webhooks into the real pipeline, exactly as Facebook and Twilio would.
+
+**Dashboard pages:**
+
+- **Today:** summary, flow, weekly tiles, approvals and the live feed.
+- **Customers:** everyone who reached out. Each has a printable audit trail, from the ad to the booking.
+- **Connections:** every outside service, with an on/off switch, plus what's coming up and the automatic
+  routines.
+- **Demo:** the script and a sample phone call.
+- **Daily report.**
+
+To drive pieces by hand instead, open a second terminal:
 
 ```bash
 set -a; . .sandbox/sandbox.env; set +a
-npm run simulate:meta && npm run brain:triage
-npm run leads:qualify        # prints capture links: open one, fill the form, watch the call get booked
-npm run brain:write-ads -- "Furnace Tune-Up"     # then Approve a draft in the dashboard
-npm run media:produce && npm run publish:approved
-npm run spend:execute        # after approving a budget change
+npm run simulate:meta                         # a burst of signed fake comments, DMs, a lead form, a review
+npm run brain:write-ads -- "Furnace Tune-Up"  # then Approve a draft in the dashboard
+npm run texts:agent -- --once                 # the texting side of the phone assistant, once
 ```
 
 ## Signals ingestion (Phase 2)

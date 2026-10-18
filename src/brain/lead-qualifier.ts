@@ -18,6 +18,8 @@ import { bigDealThresholdCad, consentWording, replyTemplates } from "./muse.ts";
 export interface QualifierConfig { baseUrl: string; secret: string }
 
 export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Promise<{ replied: number; handedOff: number; links: string[] }> {
+  const { rows: [meta] } = await db.query<{ on: boolean }>(`SELECT integration_on('meta') AS on`);
+  if (!meta.on) return { replied: 0, handedOff: 0, links: [] }; // switched off in Connections: comments wait
   const templates = replyTemplates();
   const { rows } = await db.query<{ comment_id: string; signal_id: string; intent: string; ad_id: string | null; ad_variant_id: string | null }>(
     `SELECT c.id AS comment_id, c.signal_id, c.intent, c.ad_id, c.ad_variant_id

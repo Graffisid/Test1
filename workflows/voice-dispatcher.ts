@@ -51,10 +51,11 @@ export async function dispatchLead(pool: pg.Pool, leadId: string, deps: Dispatch
     await db.query("BEGIN");
     const { rows: [lead] } = await db.query<{
       id: string; name: string; phone_e164: string | null; service_requested: string; consent_given: boolean;
-      consent_withdrawn_at: Date | null; big_deal: boolean; status: string; created_at: Date; ad_id: string | null;
-    }>(`SELECT id, name, phone_e164, service_requested, consent_given, consent_withdrawn_at, big_deal, status, created_at, ad_id
+      consent_withdrawn_at: Date | null; big_deal: boolean; status: string; created_at: Date; ad_id: string | null; contact_pref: string;
+    }>(`SELECT id, name, phone_e164, service_requested, consent_given, consent_withdrawn_at, big_deal, status, created_at, ad_id, contact_pref
         FROM leads WHERE id = $1 FOR UPDATE`, [leadId]);
-    if (!lead) { await db.query("ROLLBACK"); return { leadId, status: "skipped" }; }
+    // Leads who asked to be texted belong to the texting side (workflows/text-agent.ts).
+    if (!lead || lead.contact_pref !== "call") { await db.query("ROLLBACK"); return { leadId, status: "skipped" }; }
     if (!lead.consent_given || lead.consent_withdrawn_at || !lead.phone_e164) {
       await log(db, { action: "skip_call", status: "blocked", leadId, key: `log:nocall:${leadId}`,
         decision: "CASL: no valid consent (or no usable number) — no callback; owner follow-up" });
@@ -150,7 +151,7 @@ export async function processPending(pool: pg.Pool, deps: DispatchDeps): Promise
   const retryDelaySec = Math.floor((deps.retryDelayMs ?? 10 * 60_000) / 1000);
   const { rows } = await pool.query<{ id: string }>(
     `SELECT l.id FROM leads l
-     WHERE l.consent_given AND l.consent_withdrawn_at IS NULL AND l.created_at > now() - interval '48 hours'
+     WHERE l.consent_given AND l.consent_withdrawn_at IS NULL AND l.created_at > now() - interval '48 hours' AND l.contact_pref = 'call'
        AND l.status IN ('new', 'contacted')
        AND (
          (l.status = 'new' AND NOT EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id))

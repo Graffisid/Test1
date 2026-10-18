@@ -48,6 +48,9 @@ export async function produceMedia(
     if (!t.voiceover_url) jobs.push({ provider: providers.voice, column: "voiceover_url" });
 
     for (const job of jobs) {
+      const { rows: [conn] } = await db.query<{ on: boolean }>(`SELECT integration_on($1) AS on`,
+        [job.provider.kind === "video" ? "higgsfield" : "elevenlabs"]);
+      if (!conn.on) continue; // switched off in Connections: this asset waits
       if (batchCost + job.provider.estCostCad > threshold) {
         await escalate(`Stopped: next ${job.provider.kind} would take this batch to $${(batchCost + job.provider.estCostCad).toFixed(2)}, over the $${threshold.toFixed(2)} threshold. Owner decision needed.`);
         return { status: "stopped_cost_threshold", generated, failed, batchCostCad: batchCost };

@@ -117,6 +117,14 @@ export async function triageSignal(db: pg.ClientBase, llm: StructuredLlm, s: Sig
        WHERE NOT EXISTS (SELECT 1 FROM comments WHERE signal_id = $1)`,
       [s.id, src.platform, src.kind, String(s.payload.author_handle ?? s.payload.author_name ?? s.payload.sender_id ?? "unknown"),
        String(s.payload.untrusted_text ?? "").slice(0, 5000) || "(no text)", final.intent, sentiment, status]);
+    // Which of our posts was this on? A post we published traces back to its ad and variant.
+    const postId = typeof s.payload.post_id === "string" ? s.payload.post_id : typeof s.payload.media_id === "string" ? s.payload.media_id : null;
+    if (postId) {
+      await db.query(
+        `UPDATE comments c SET ad_variant_id = p.target_id, ad_id = v.ad_id
+         FROM publications p JOIN ad_variants v ON v.id = p.target_id
+         WHERE c.signal_id = $1 AND c.ad_id IS NULL AND p.target_type = 'ad_variant' AND p.external_ref = $2`, [s.id, postId]);
+    }
   }
 
   await db.query(

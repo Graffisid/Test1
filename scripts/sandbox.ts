@@ -8,7 +8,8 @@
  *   1. Refuses to run unless DATABASE_URL points at a local database (it can reset it).
  *   2. Creates every least-privilege login with a fresh random password (never the superuser).
  *   3. Writes those connection strings and a random owner password to .sandbox/ (gitignored, chmod 600).
- *   4. Starts the webhook receiver + capture form (:3001), the voice dispatcher, and the dashboard (:3000).
+ *   4. Starts the webhook receiver + capture form (:3001), the voice dispatcher, the agent loop (sorting,
+ *      replies, texts, publishing), the demo "customer's phone" (:3002), and the dashboard (:3000).
  *
  * Everything external stays simulated: no Meta, no ad spend, no calls, no paid AI. Ctrl-C stops it all.
  */
@@ -45,7 +46,7 @@ if (!keep) {
 }
 
 // 2. Logins (fresh random passwords each start)
-const services = ["dashboard", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice"] as const;
+const services = ["dashboard", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo"] as const;
 const urls: Record<string, string> = {};
 for (const s of services) {
   const pw = secret();
@@ -72,6 +73,9 @@ const env: Record<string, string> = {
   META_WEBHOOK_VERIFY_TOKEN: secret(),
   CAPTURE_LINK_SECRET: secret(32),
   PUBLIC_BASE_URL: "http://127.0.0.1:3001",
+  TWILIO_AUTH_TOKEN: secret(),
+  DEMO_MODE: "1",
+  DEMO_DATABASE_URL: urls.demo,
 };
 mkdirSync(DIR, { recursive: true, mode: 0o700 });
 const envFile = join(DIR, "sandbox.env");
@@ -126,6 +130,8 @@ process.on("SIGTERM", () => stop());
 
 start("receiver", tsx("src/api/start.ts"), {});
 start("dispatcher", tsx("workflows/voice-dispatcher.ts"), {});
+start("agents", tsx("workflows/agent-loop.ts"), {});
+start("phone-demo", tsx("src/demo/server.ts"), {});
 start("dashboard", [join(ROOT, "dashboard/node_modules/next/dist/bin/next"), "start", "-H", "127.0.0.1", "-p", "3000"], {
   // The dashboard reads these ahead of dashboard/.env.local, so the sandbox never edits that file.
   DATABASE_URL: urls.dashboard,
@@ -143,7 +149,8 @@ const ready = async (url: string) => {
   }
   return false;
 };
-if (!(await ready("http://127.0.0.1:3000/login")) || !(await ready("http://127.0.0.1:3001/healthz"))) {
+if (!(await ready("http://127.0.0.1:3000/login")) || !(await ready("http://127.0.0.1:3001/healthz"))
+    || !(await ready("http://127.0.0.1:3002/"))) {
   console.error("sandbox: services did not come up in 30 s.");
   stop(1);
 } else {
@@ -154,15 +161,14 @@ if (!(await ready("http://127.0.0.1:3000/login")) || !(await ready("http://127.0
  Dashboard   http://127.0.0.1:3000
  Password    ${ownerPassword}     (also in .sandbox/owner-password.txt)
 
- In a second terminal, load the sandbox env, then drive the agents:
+ Customer's phone (for demos)   http://127.0.0.1:3002
+   Comment on the post, open the link in Northshore's reply, choose "Text me a quote",
+   then answer the texts. Approve the booking on the dashboard. Full script: dashboard → Demo.
+
+ The AI team runs by itself every few seconds. To drive pieces by hand instead:
    set -a; . .sandbox/sandbox.env; set +a
-   npm run simulate:meta                       # signed fake comments, DMs, a lead form, a review
-   npm run brain:triage                        # classify them
-   npm run leads:qualify                       # capture-link replies; form leads get called back
+   npm run simulate:meta                         # a burst of signed fake comments, DMs, a form, a review
    npm run brain:write-ads -- "Furnace Tune-Up"  # then Approve a draft in the dashboard
-   npm run media:produce && npm run publish:approved
-   npm run spend:execute                       # applies approved budget changes, within caps
- leads:qualify prints the capture links: open one to play the customer.
 
  Ctrl-C stops everything.
 ──────────────────────────────────────────────────────────────────────`);

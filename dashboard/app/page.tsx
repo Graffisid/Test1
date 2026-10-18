@@ -28,7 +28,7 @@ function toView(a: ApprovalRow, now: number): ApprovalView {
     payload: a.payload, original_payload: a.original_payload, requestedBy: AGENT_LABEL[a.requested_by_agent] ?? a.requested_by_agent,
     status: a.status, edited: a.edited, needs_fact_check: !!a.needs_fact_check, createdLabel: relative(a.created_at, now),
     expiresLabel: relative(a.expires_at, now), decidedLabel: a.decided_at ? dateTime(a.decided_at) : null,
-    decided_by: a.decided_by, decision_note: a.decision_note,
+    decided_by: a.decided_by, decision_note: a.decision_note, leadId: a.lead_id,
   };
 }
 

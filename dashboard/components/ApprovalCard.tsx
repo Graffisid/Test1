@@ -5,6 +5,7 @@ import { approveAction, editAction, rejectAction, type ActionState } from "@/app
 import { Icon, KIND_ICON } from "./Icon";
 import { StatusChip } from "./StatusChip";
 import { toast } from "./Toaster";
+import { phonePretty } from "@/lib/format";
 
 export interface ApprovalView {
   id: string;
@@ -24,6 +25,7 @@ export interface ApprovalView {
   decidedLabel: string | null;
   decided_by: string | null;
   decision_note: string | null;
+  leadId: string | null;
 }
 
 const FIELD_LABEL: Record<string, string> = {
@@ -43,7 +45,28 @@ const EDITABLE: Record<string, string[]> = {
 const str = (v: unknown) => (typeof v === "string" ? v : null);
 
 /** Shows the item the way the public would see it: an ad as an ad, a reply as a reply. */
-function Preview({ kind, p }: { kind: string; p: Record<string, unknown> }) {
+function Preview({ kind, p, leadId }: { kind: string; p: Record<string, unknown>; leadId?: string | null }) {
+  if (kind === "booking") {
+    const src = (p.source ?? {}) as Record<string, unknown>;
+    const at = (iso: unknown) => typeof iso === "string"
+      ? new Date(iso).toLocaleString("en-CA", { timeZone: "America/Toronto", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
+    return (
+      <div className="pv-booking">
+        <div className="bk-when">
+          <span className="bk-day">{str(p.slot_label)}</span>
+          <span className="bk-what">{str(p.service)} · {str(p.price)}</span>
+        </div>
+        <dl className="bk-facts">
+          <div><dt>Customer</dt><dd>{str(p.customer)}</dd></div>
+          <div><dt>Phone</dt><dd>{phonePretty(str(p.phone))}</dd></div>
+          <div><dt>Came from</dt><dd>{str(src.ad) ? <>{str(src.ad)}{str(src.variant) ? ` — variant ${str(src.variant)}` : ""}</> : "Unknown source"}</dd></div>
+          {str(src.comment) && <div><dt>Their comment</dt><dd>“{str(src.comment)}”{at(src.commented_at) ? <span className="muted"> · {at(src.commented_at)}</span> : null}</dd></div>}
+          <div><dt>Form &amp; consent</dt><dd>{at(p.form_at)} · {str(p.consent) ?? "recorded"}</dd></div>
+        </dl>
+        {leadId && <a className="bk-audit" href={`/customers/${leadId}`}>See the full audit trail →</a>}
+      </div>
+    );
+  }
   if (kind === "budget_reallocation") {
     const proposals = Array.isArray(p.proposals) ? (p.proposals as string[]) : [];
     const projected = typeof p.weekly_projection_cad === "number" ? p.weekly_projection_cad : null;
@@ -171,7 +194,7 @@ export function ApprovalCard({ a }: { a: ApprovalView }) {
           </div>
         </form>
       ) : (
-        <Preview kind={a.kind} p={a.payload} />
+        <Preview kind={a.kind} p={a.payload} leadId={a.leadId} />
       )}
 
       {a.edited && a.original_payload && mode === "view" && (
@@ -192,7 +215,7 @@ export function ApprovalCard({ a }: { a: ApprovalView }) {
               </label>
             )}
             <button type="submit" className="btn primary" disabled={busy}>
-              <Icon name="check" /> {approving ? "Approving…" : "Approve"}
+              <Icon name="check" /> {approving ? "Saving…" : a.kind === "booking" ? "Confirm booking" : "Approve"}
             </button>
             {editable && (
               <button type="button" className="btn" onClick={() => setMode("edit")} disabled={busy}>
@@ -210,7 +233,7 @@ export function ApprovalCard({ a }: { a: ApprovalView }) {
         <form action={reject} className="edit-form">
           <input type="hidden" name="id" value={a.id} />
           <label className="field">
-            <span>Tell your team why (optional, it helps them learn)</span>
+            <span>{a.kind === "booking" ? "Why? (optional, for your records)" : "Tell your team why (optional, it helps them learn)"}</span>
             <textarea name="note" rows={2} maxLength={500} autoFocus />
           </label>
           <div className="actions">

@@ -3,6 +3,7 @@
  *   GET  /healthz         liveness, no internals
  *   GET  /webhooks/meta   Meta subscription verification (hub.verify_token → hub.challenge)
  *   POST /webhooks/meta   signed deliveries → signals
+ *   POST /webhooks/sms    Twilio-signed inbound texts → messages (src/api/sms-webhook.ts), when configured
  *   /c/<token>, /u/<token> lead-capture form and opt-out (src/api/capture.ts), when configured
  *
  * Order of checks on POST: size limit → signature (HMAC over the raw bytes) → JSON parse → ingest.
@@ -14,6 +15,7 @@ import type pg from "pg";
 import { verifyMetaSignature } from "./meta-webhook.ts";
 import { ingestMetaDelivery } from "../../workflows/ingest-comments.ts";
 import { createCaptureHandler, type CaptureOptions } from "./capture.ts";
+import { verifyTwilioSignature } from "./sms-webhook.ts";
 
 export interface IngestServerOptions {
   pool: pg.Pool;
@@ -24,6 +26,8 @@ export interface IngestServerOptions {
   log?: (msg: string, meta?: Record<string, unknown>) => void;
   /** Lead-capture form + opt-out pages (lead-qualifier). Disabled when absent. */
   capture?: CaptureOptions;
+  /** Inbound texts. publicUrl is the exact URL Twilio posts to (it is part of the signature). Disabled when absent. */
+  sms?: { authToken: string; publicUrl: string };
 }
 
 function send(res: ServerResponse, status: number, body: string) {
@@ -73,6 +77,27 @@ export function createIngestServer(opts: IngestServerOptions): Server {
         return req.method === "GET" ? send(res, 200, "ok") : send(res, 405, "method not allowed");
       }
       if (capture && (await capture(req, res, url.pathname))) return;
+      if (opts.sms && url.pathname === "/webhooks/sms") {
+        if (req.method !== "POST") return send(res, 405, "method not allowed");
+        let raw: Buffer;
+        try {
+          raw = await readBody(req, 16_384);
+        } catch (err) {
+          if (err instanceof TooLarge) return send(res, 413, "payload too large");
+          throw err;
+        }
+        const params = new URLSearchParams(raw.toString("utf8"));
+        if (!verifyTwilioSignature(opts.sms.publicUrl, params, req.headers["x-twilio-signature"] as string | undefined, opts.sms.authToken)) {
+          log("sms refused: bad or missing signature");
+          return send(res, 401, "invalid signature");
+        }
+        const from = params.get("From") ?? "", body = params.get("Body") ?? "", sid = params.get("MessageSid") ?? "";
+        if (!/^\+\d{8,15}$/.test(from) || !body || !/^[A-Za-z0-9]{10,64}$/.test(sid)) return send(res, 400, "bad request");
+        const { rows } = await opts.pool.query<{ lead: string | null }>(`SELECT record_inbound_sms($1, $2, $3) AS lead`, [from, body, sid]);
+        log("sms received", { matched: !!rows[0]?.lead });
+        res.writeHead(200, { "content-type": "text/xml; charset=utf-8", "cache-control": "no-store" });
+        return res.end("<Response></Response>");
+      }
       if (url.pathname !== "/webhooks/meta") return send(res, 404, "not found");
 
       if (req.method === "GET") {

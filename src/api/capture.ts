@@ -1,7 +1,7 @@
 /**
  * Public lead-capture form (lead-qualifier's "form endpoint") and opt-out page.
  *
- *   GET  /c/<token>   form: name, phone, service, CASL consent checkbox (never pre-ticked)
+ *   GET  /c/<token>   form: name, phone, service, call-or-text, CASL consent checkbox (never pre-ticked)
  *   POST /c/<token>   validate → signal + lead (consent wording/version/time stored) → dispatcher is woken
  *   GET  /u/<token>   opt-out page;  POST /u/<token>  withdraw consent + do-not-contact
  *
@@ -39,6 +39,7 @@ function page(res: ServerResponse, status: number, title: string, body: string) 
 h1{font-size:1.4rem}label{display:block;margin:14px 0 4px;font-weight:600}input,select{font:inherit;width:100%;padding:9px;border:1px solid #c3c2b7;border-radius:8px;box-sizing:border-box}
 .consent{display:flex;gap:10px;align-items:flex-start;font-weight:400;background:#f2f1ed;padding:12px;border-radius:8px}.consent input{width:auto;margin-top:4px}
 button{font:inherit;font-weight:600;margin-top:18px;padding:11px 18px;border:0;border-radius:8px;background:#2a78d6;color:#fff;width:100%}
+.pref{border:0;padding:0;margin:14px 0 0}.pref legend{font-weight:600;margin-bottom:4px}.pref label{display:flex;gap:8px;align-items:center;font-weight:400;margin:4px 0}.pref input{width:auto}
 .err{background:#fdecec;border-left:3px solid #d03b3b;padding:8px 10px;border-radius:6px}.small{font-size:.85rem;color:#52514e}.hp{position:absolute;left:-9999px}</style>
 </head><body>${body}</body></html>`);
 }
@@ -60,20 +61,24 @@ function readForm(req: IncomingMessage, limit = 8192): Promise<URLSearchParams |
   });
 }
 
-function formHtml(action: string, err: string | null, values: { name?: string; phone?: string; service?: string } = {}) {
+function formHtml(action: string, err: string | null, values: { name?: string; phone?: string; service?: string; contact?: string } = {}) {
   const c = consentWording();
   const options = Object.entries(SERVICES).map(([k, v]) =>
     `<option value="${k}"${values.service === k ? " selected" : ""}>${esc(v.label)}</option>`).join("");
-  return `<h1>Get a call back</h1>
-<p>Leave your number and a Northshore team member will call you — usually within a minute.</p>
+  const pick = (v: string) => (values.contact === v ? " checked" : ""); // never pre-selected: the person chooses
+  return `<h1>Get a quote</h1>
+<p>Leave your number and Northshore will get back to you — usually within a minute.</p>
 ${err ? `<p class="err" role="alert">${esc(err)}</p>` : ""}
 <form method="post" action="${esc(action)}">
 <label for="name">Your name</label><input id="name" name="name" maxlength="80" required autocomplete="name" value="${esc(values.name ?? "")}">
 <label for="phone">Phone number</label><input id="phone" name="phone" type="tel" maxlength="20" required autocomplete="tel" value="${esc(values.phone ?? "")}">
 <label for="service">What do you need?</label><select id="service" name="service">${options}</select>
+<fieldset class="pref"><legend>How should we reach you?</legend>
+<label><input type="radio" name="contact" value="call" required${pick("call")}> Call me</label>
+<label><input type="radio" name="contact" value="text"${pick("text")}> Text me a quote</label></fieldset>
 <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
 <label class="consent"><input type="checkbox" name="consent" value="yes" required> <span>${esc(c.text)}</span></label>
-<button type="submit">Call me back</button>
+<button type="submit">Send</button>
 </form>
 <p class="small">${esc(c.identification)}</p>`;
 }
@@ -120,16 +125,18 @@ export function createCaptureHandler(opts: CaptureOptions) {
       return true;
     }
     const action = `/c/${token}`;
-    if (req.method === "GET") { page(res, 200, "Get a call back", formHtml(action, null)); return true; }
+    if (req.method === "GET") { page(res, 200, "Get a quote", formHtml(action, null)); return true; }
     if (req.method !== "POST") { page(res, 405, "Not allowed", "<h1>Not allowed</h1>"); return true; }
 
     if (limited(ipOf(req))) { page(res, 429, "Slow down", "<h1>Too many tries</h1><p>Please wait a few minutes, or call (905) 555-0100.</p>"); return true; }
     const form = await readForm(req);
     if (!form) { page(res, 413, "Too large", "<h1>That was too much data</h1>"); return true; }
-    const values = { name: (form.get("name") ?? "").trim(), phone: (form.get("phone") ?? "").trim(), service: form.get("service") ?? "" };
+    const values = { name: (form.get("name") ?? "").trim(), phone: (form.get("phone") ?? "").trim(), service: form.get("service") ?? "",
+      contact: form.get("contact") === "text" ? "text" : "call" };
     const thanks = (big: boolean, leadId: string | null) => {
+      const how = values.contact === "text" ? "we'll text you a quote within a minute." : "we'll call you within a minute.";
       const optOut = leadId ? issueToken({ typ: "optout", lid: leadId, exp: Math.floor(Date.now() / 1000) + 365 * 86400 }, opts.secret) : null;
-      page(res, 200, "Thanks", `<h1>Thanks — we've got it</h1><p>${big ? "A member of our team will call you shortly." : "Keep your phone handy: we'll call you within a minute."}</p>
+      page(res, 200, "Thanks", `<h1>Thanks — we've got it</h1><p>${big ? "A member of our team will call you shortly." : `Keep your phone handy: ${how}`}</p>
 ${optOut ? `<p class="small">Changed your mind? <a href="/u/${esc(optOut)}">Stop calls and texts</a>.</p>` : ""}`);
     };
     if (form.get("website")) { thanks(false, null); return true; } // honeypot: bots get a polite no-op
@@ -138,8 +145,8 @@ ${optOut ? `<p class="small">Changed your mind? <a href="/u/${esc(optOut)}">Stop
     const err = !values.name || values.name.length > 80 ? "Please enter your name."
       : !phone ? "Please enter a 10-digit phone number."
       : !isService(values.service) ? "Please choose a service."
-      : form.get("consent") !== "yes" ? "Please tick the box so we're allowed to call you back." : null;
-    if (err) { page(res, 422, "Get a call back", formHtml(action, err, values)); return true; }
+      : form.get("consent") !== "yes" ? "Please tick the box so we're allowed to contact you." : null;
+    if (err) { page(res, 422, "Get a quote", formHtml(action, err, values)); return true; }
 
     const consent = consentWording();
     const service = values.service as keyof typeof SERVICES;
@@ -158,17 +165,17 @@ ${optOut ? `<p class="small">Changed your mind? <a href="/u/${esc(optOut)}">Stop
       if (sig) {
         const { rows: [lead] } = await client.query<{ id: string }>(
           `INSERT INTO leads (signal_id, comment_id, ad_id, ad_variant_id, name, phone, phone_e164, service_requested, estimated_value_cad,
-             consent_given, consent_at, consent_text, consent_source, capture_token_id, big_deal, idempotency_key)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, now(), $10, $11, $12, $13, $14)
+             consent_given, consent_at, consent_text, consent_source, capture_token_id, big_deal, idempotency_key, contact_pref)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, now(), $10, $11, $12, $13, $14, $15)
            ON CONFLICT (capture_token_id) DO NOTHING RETURNING id`,
           [sig.id, c.cid, c.aid, c.vid, values.name, values.phone, phone, service, value, consent.text,
-           `capture_form:${consent.version}`, c.jti, big, `lead.created:capture:${c.jti}`]);
+           `capture_form:${consent.version}`, c.jti, big, `lead.created:capture:${c.jti}`, values.contact]);
         leadId = lead?.id ?? null;
         if (leadId) {
           await client.query(
             `INSERT INTO agent_activity_log (agent, department, action, decision, entity_type, entity_id, idempotency_key)
              VALUES ('lead-qualifier', 'lead_capture', 'create_lead', $1, 'lead', $2, $3)`,
-            [`Lead created from capture form: ${SERVICES[service].label}, consent ${consent.version} stored${big ? " — BIG DEAL" : ""}`,
+            [`Lead created from capture form: ${SERVICES[service].label}, wants a ${values.contact === "text" ? "text" : "call"}, consent ${consent.version} stored${big ? " — BIG DEAL" : ""}`,
              leadId, `log:lead:${leadId}`]);
         }
       }

@@ -74,4 +74,12 @@ export const KIND_COPY: Record<string, { label: string; ifApproved: string }> = 
   budget_reallocation: { label: "Budget change", ifApproved: "Daily budgets change as listed. Spend caps still apply." },
   reputation_reply: { label: "Review reply", ifApproved: "Gets posted under the review." },
   ad_launch: { label: "Ad launch", ifApproved: "Starts spending within the caps." },
+  booking: { label: "New booking", ifApproved: "The customer gets a confirmation text and the visit goes on your calendar." },
 };
+
+/** +19055550142 → (905) 555-0142 for North American numbers; anything else as-is. */
+export function phonePretty(e164: string | null | undefined): string | null {
+  if (!e164) return null;
+  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
+}

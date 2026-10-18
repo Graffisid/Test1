@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { Notifier } from "@/components/Notifier";
 import { Toaster } from "@/components/Toaster";
 import { isOwner } from "@/lib/session";
 import { logoutAction } from "./auth-actions";
@@ -29,6 +30,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {authed && (
             <nav aria-label="Main">
               <Link href="/">Today</Link>
+              <Link href="/customers">Customers</Link>
+              <Link href="/connections">Connections</Link>
+              <Link href="/demo">Demo</Link>
               <Link href="/digest">Daily report</Link>
             </nav>
           )}
@@ -46,7 +50,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </header>
         <main id="main">{children}</main>
-        {authed && <Toaster />}
+        {authed && <><Toaster /><Notifier /></>}
       </body>
     </html>
   );

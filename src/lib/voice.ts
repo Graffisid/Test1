@@ -50,6 +50,8 @@ export class MockVoiceAgent implements VoiceAgent {
 export interface Calendar {
   readonly name: string;
   nextSlot(db: pg.ClientBase, after: Date): Promise<Date>;
+  /** The next n open visit times (held and confirmed visits count as taken). */
+  freeSlots(db: pg.ClientBase, after: Date, n: number): Promise<Date[]>;
   book(slot: Date, title: string): Promise<string>;
 }
 
@@ -69,8 +71,13 @@ function torontoSlot(dateStr: string, hour: number): Date {
 export class MockCalendar implements Calendar {
   readonly name = "mock_google_calendar";
   async nextSlot(db: pg.ClientBase, after: Date): Promise<Date> {
+    const [slot] = await this.freeSlots(db, after, 1);
+    return slot;
+  }
+  async freeSlots(db: pg.ClientBase, after: Date, n: number): Promise<Date[]> {
     const earliest = after.getTime() + 2 * 3600_000;
-    for (let day = 0; day < 21; day++) {
+    const out: Date[] = [];
+    for (let day = 0; day < 21 && out.length < n; day++) {
       const date = new Date(after.getTime() + day * 86400_000).toLocaleDateString("en-CA", { timeZone: TZ });
       const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
       if (weekday === 0) continue; // closed Sundays (emergencies go through the 24/7 line)
@@ -78,11 +85,13 @@ export class MockCalendar implements Calendar {
         const slot = torontoSlot(date, hour);
         if (slot.getTime() < earliest) continue;
         const { rowCount } = await db.query(
-          `SELECT 1 FROM appointments WHERE status = 'scheduled' AND scheduled_for = $1`, [slot]);
-        if (!rowCount) return slot;
+          `SELECT 1 FROM appointments WHERE status IN ('scheduled', 'pending_owner') AND scheduled_for = $1`, [slot]);
+        if (!rowCount) out.push(slot);
+        if (out.length === n) break;
       }
     }
-    throw new Error("No free slot in the next 3 weeks");
+    if (out.length < n) throw new Error("No free slot in the next 3 weeks");
+    return out;
   }
   async book(): Promise<string> {
     return `mock_gcal_${randomUUID().slice(0, 12)}`;

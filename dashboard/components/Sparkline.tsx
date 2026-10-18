@@ -1,5 +1,5 @@
 /**
- * 14-point trend for a stat tile: de-emphasis line, current period in the accent.
+ * 14-day trend: last week faded, this week in the accent, drawn in from left to right.
  * Gaps (null) break the line rather than inventing a zero. Native <title> per point = hover readout.
  */
 export function Sparkline({ points, label, format }: {
@@ -7,7 +7,7 @@ export function Sparkline({ points, label, format }: {
   label: string;
   format: (v: number) => string;
 }) {
-  const W = 160, H = 36, PAD = 4;
+  const W = 200, H = 44, PAD = 4;
   const vals = points.map((p) => p.value).filter((v): v is number => v !== null);
   if (vals.length < 2) return <div className="spark-empty">Not enough data yet</div>;
   const min = Math.min(...vals), max = Math.max(...vals);
@@ -26,19 +26,20 @@ export function Sparkline({ points, label, format }: {
     current += `${current ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`;
   });
   if (current) segments.push(current);
-  const cutoff = points.length - 7; // last 7 points = current period
+  const cutoff = points.length - 7; // last 7 points = this week
+  const last = [...points].reverse().find((p) => p.value !== null);
+  const lastIdx = last ? points.lastIndexOf(last) : -1;
 
   return (
     <svg className="spark" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}, last 14 days`} preserveAspectRatio="none">
-      {segments.map((d, i) => <path key={i} d={d} className="spark-line" />)}
+      <rect className="spark-week" x={x(cutoff) - 4} y={0} width={W - x(cutoff) + 4} height={H} rx={6} />
+      {segments.map((d, i) => <path key={i} d={d} className="spark-line" pathLength={1} />)}
+      {last && last.value !== null && <circle className="spark-now" cx={x(lastIdx)} cy={y(last.value)} r={3.5} />}
       {points.map((p, i) =>
         p.value === null ? null : (
-          <g key={p.day}>
-            <circle cx={x(i)} cy={y(p.value)} r={i >= cutoff ? 2.5 : 1.5} className={i >= cutoff ? "spark-dot current" : "spark-dot"} />
-            <rect x={x(i) - 5} y={0} width={10} height={H} className="spark-hit">
-              <title>{`${p.day}: ${format(p.value)}`}</title>
-            </rect>
-          </g>
+          <rect key={p.day} x={x(i) - 6} y={0} width={12} height={H} className="spark-hit">
+            <title>{`${p.day}: ${format(p.value)}`}</title>
+          </rect>
         ),
       )}
     </svg>

@@ -278,26 +278,36 @@ npm run security-check       # (in another terminal) 20 HTTP-level security chec
 
 Security model, threat table and remaining risks: [`SECURITY.md`](./SECURITY.md).
 
-- **Overview (`/`):** the four KPI cards, the approvals queue, and a live
-  agent activity feed.
-  - **KPI cards:** Cost Per Lead, Speed to Lead, Booked & Paid, and Ad to
-    Customer.
-  - **Approvals queue:** each item has Approve / Edit / Reject buttons.
-  - **Activity feed:** refreshes every 5 seconds. You can filter by agent or
-    show only interrupts and escalations.
-- **Morning digest (`/digest`):** the one-page summary from
-  `.claude/skills/morning-digest/` for any past day.
+The dashboard is written for an owner who isn't technical: plain words, one accent colour, and gentle
+motion. All motion is CSS/SVG, with no animation library, and it switches off under the system's
+"reduce motion" setting. Light and dark modes both work, and so do phone screens.
 
-**Approve** writes an `approvals` row decided by the owner, plus activity-log
-rows. It does **not** publish or spend, because no publish or spend path
-exists yet.
+- **Today (`/`):**
+  - **Summary line:** a one-sentence summary of the last 7 days, and how many items need your OK.
+  - **How your ads turn into jobs:** an animated flow covering the last 30 days. It goes ad spend →
+    people who reached out → called back → booked → paid, with the conversion between each step and
+    the return per $1.
+  - **This week vs last week:** four tiles: callback speed (a gauge against the 60-second goal),
+    cost per lead, jobs booked, and money collected. Each says whether it's better or worse than
+    last week, with a 14-day chart.
+  - **Needs your OK:** each item is shown the way the public would see it. An ad looks like an ad,
+    a review reply looks like a reply, and a budget change shows a meter against the weekly cap. Each
+    one also says what happens if you approve it, with **Approve**, **Edit** and **Decline** buttons.
+  - **What your team is doing:** a live feed that refreshes every 5 seconds. Agents have plain role
+    names ("Phone assistant", "Ad writer"), repeated entries are folded into one line, and a
+    "Needs attention" tab shows only interrupts and escalations.
+- **Daily report (`/digest`):** the one-page summary from `.claude/skills/morning-digest/` for any
+  past day.
+
+**Approve** writes an `approvals` row decided by the owner, plus activity-log rows. It doesn't publish
+or spend by itself: the publisher and the spend executor do that on their next run, and both are
+simulated in this build. A short confirmation appears in the corner.
 
 - **Edit** keeps the item pending.
-- **Reject** takes an optional note.
-- **Unverified claims:** a draft flagged for one can't be approved until you
-  confirm the claim. The server enforces this as well as the browser.
-- **Expired items:** pending items past their deadline are marked expired,
-  never approved.
+- **Decline** takes an optional note.
+- **Unverified claims:** a draft flagged for one can't be approved until you confirm the claim. The
+  server enforces this as well as the browser.
+- **Expired items:** pending items past their deadline are marked expired, never approved.
 
 `npm run db:seed` (from the repo root) restores the demo queue.
 

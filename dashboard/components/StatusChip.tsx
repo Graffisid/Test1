@@ -1,12 +1,12 @@
 const MAP: Record<string, { icon: string; label: string; tone: string }> = {
-  ok: { icon: "●", label: "OK", tone: "neutral" },
-  interrupt: { icon: "⏸", label: "Interrupt", tone: "critical" },
-  escalated: { icon: "⚑", label: "Escalated", tone: "serious" },
+  ok: { icon: "●", label: "Done", tone: "neutral" },
+  interrupt: { icon: "⏸", label: "Paused, needs you", tone: "critical" },
+  escalated: { icon: "⚑", label: "Sent to you", tone: "serious" },
   blocked: { icon: "⛔", label: "Blocked", tone: "warning" },
   error: { icon: "✕", label: "Error", tone: "critical" },
-  pending: { icon: "◷", label: "Pending", tone: "warning" },
+  pending: { icon: "◷", label: "Waiting", tone: "warning" },
   approved: { icon: "✓", label: "Approved", tone: "good" },
-  rejected: { icon: "✕", label: "Rejected", tone: "critical" },
+  rejected: { icon: "✕", label: "Declined", tone: "critical" },
   expired: { icon: "⌛", label: "Expired", tone: "neutral" },
 };
 

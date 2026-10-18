@@ -52,3 +52,26 @@ export const SERVICE_LABEL: Record<string, string> = {
   heat_pump: "Heat pump install",
   drain_cleaning: "Drain cleaning",
 };
+
+/** Plain-language names for the agents, for people who don't know the roster. */
+export const AGENT_LABEL: Record<string, string> = {
+  "growth-director": "Team manager",
+  triage: "Inbox sorter",
+  "ad-writer": "Ad writer",
+  "media-producer": "Video studio",
+  "lead-qualifier": "Lead catcher",
+  "voice-dispatcher": "Phone assistant",
+  analyst: "Analyst",
+  "reputation-guard": "Review guard",
+  owner: "You",
+  system: "System",
+};
+
+/** What each kind of approval is, and what happens if the owner says yes. */
+export const KIND_COPY: Record<string, { label: string; ifApproved: string }> = {
+  ad_variant: { label: "New ad", ifApproved: "Goes live on Facebook & Instagram." },
+  organic_post: { label: "Social post", ifApproved: "Gets posted at the scheduled time. No spend." },
+  budget_reallocation: { label: "Budget change", ifApproved: "Daily budgets change as listed. Spend caps still apply." },
+  reputation_reply: { label: "Review reply", ifApproved: "Gets posted under the review." },
+  ad_launch: { label: "Ad launch", ifApproved: "Starts spending within the caps." },
+};

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { StatusChip } from "@/components/StatusChip";
-import { KIND_LABEL, SERVICE_LABEL, dateTime, longDate, money, pct, relative, seconds } from "@/lib/format";
+import { AGENT_LABEL, KIND_COPY, SERVICE_LABEL, dateTime, longDate, money, pct, relative, seconds } from "@/lib/format";
 import { requireOwnerPage } from "@/lib/session";
 import { expireStaleApprovals, getDigest } from "@/lib/queries";
 
@@ -40,10 +40,10 @@ export default async function DigestPage({ searchParams }: { searchParams: Promi
     : [];
 
   return (
-    <article className="digest" aria-labelledby="digest-title">
+    <article className="digest rise" aria-labelledby="digest-title">
       <nav className="digest-nav" aria-label="Digest date">
         {dg.date > dg.bounds.min ? <Link href={`/digest?date=${prev}`}>← {prev}</Link> : <span />}
-        <span className="muted small">Morning digest · prepared by growth-director</span>
+        <span className="muted small">Daily report · prepared by your team manager</span>
         {dg.date < dg.bounds.max ? <Link href={`/digest?date=${next}`}>{next} →</Link> : <span />}
       </nav>
 
@@ -111,7 +111,7 @@ export default async function DigestPage({ searchParams }: { searchParams: Promi
             <ol className="plain waiting">
               {dg.waiting.map((a) => (
                 <li key={a.id}>
-                  <span className="kind">{KIND_LABEL[a.kind] ?? a.kind}</span> {a.title}
+                  <span className="kind">{KIND_COPY[a.kind]?.label ?? a.kind}</span> {a.title}
                   {a.needs_fact_check && <span className="chip chip-serious"><span aria-hidden="true">⚑</span> Unverified claim</span>}
                   <span className="muted small"> · waiting {relative(a.created_at, now).replace(" ago", "")}, expires {relative(a.expires_at, now)}</span>
                 </li>
@@ -120,16 +120,16 @@ export default async function DigestPage({ searchParams }: { searchParams: Promi
           ) : (
             <p className="muted">Nothing pending.</p>
           )}
-          <p><Link href="/#queue-title">Review in the approvals queue →</Link></p>
+          <p><Link href="/#approvals">Review them on the Today page →</Link></p>
         </section>
 
         <section className="digest-block">
-          <h2>Escalations this day</h2>
+          <h2>Flagged for you this day</h2>
           {dg.escalations.length ? (
             <ul className="plain escalations">
               {dg.escalations.map((e) => (
                 <li key={e.id}>
-                  <StatusChip status={e.status} /> <span className="muted small">{dateTime(e.occurred_at)} · {e.agent}</span>
+                  <StatusChip status={e.status} /> <span className="muted small">{dateTime(e.occurred_at)} · {AGENT_LABEL[e.agent] ?? e.agent}</span>
                   <p>{e.decision}</p>
                 </li>
               ))}
@@ -137,12 +137,12 @@ export default async function DigestPage({ searchParams }: { searchParams: Promi
           ) : (
             <p className="muted">None.</p>
           )}
-          <p className="muted small">{dg.openEscalatedComments} escalated comment{dg.openEscalatedComments === 1 ? "" : "s"} still open overall.</p>
+          <p className="muted small">{dg.openEscalatedComments} comment{dg.openEscalatedComments === 1 ? "" : "s"} still waiting for you to answer.</p>
         </section>
       </div>
 
       <section className="digest-block runcost">
-        <h2>Run cost vs revenue</h2>
+        <h2>What the AI team cost</h2>
         <p>
           Estimated software &amp; API cost <strong>{money(dg.runCost)}</strong> vs revenue collected{" "}
           <strong>{money(k?.revenue_cad ?? 0)}</strong>

@@ -7,9 +7,10 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage() {
   if (await isOwner()) redirect("/");
   return (
-    <section className="card login">
-      <h1>Sign in</h1>
-      <p className="muted">Only the owner can view this dashboard or approve anything.</p>
+    <section className="login rise">
+      <span className="login-mark" aria-hidden="true">N</span>
+      <h1>Welcome back</h1>
+      <p className="muted">Sign in to see what your AI team did and approve their work.</p>
       <LoginForm />
     </section>
   );

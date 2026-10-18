@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
+import { Toaster } from "@/components/Toaster";
 import { isOwner } from "@/lib/session";
 import { logoutAction } from "./auth-actions";
 import "./globals.css";
@@ -18,28 +19,34 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <a href="#main" className="skip">Skip to content</a>
         <header className="topbar">
-          <div className="brand">
+          <Link href="/" className="brand">
             <span className="logo" aria-hidden="true">N</span>
-            <div>
-              <strong>Northshore Growth Desk</strong>
-              <span className="muted small">Northshore Plumbing &amp; Heating · Burlington, ON</span>
-            </div>
-          </div>
+            <span>
+              <strong>Northshore</strong>
+              <span className="brand-sub">Growth Desk</span>
+            </span>
+          </Link>
           {authed && (
             <nav aria-label="Main">
-              <Link href="/">Overview</Link>
-              <Link href="/digest">Morning digest</Link>
+              <Link href="/">Today</Link>
+              <Link href="/digest">Daily report</Link>
+            </nav>
+          )}
+          <div className="topbar-end">
+            <span className="sandbox" role="note"
+              title="Practice mode: a made-up business and fake data. Nothing is really posted, spent or called.">
+              <span className="sandbox-dot" aria-hidden="true" />
+              Sandbox<span className="sr-only">: practice mode with made-up data. Nothing is really posted, spent or called.</span>
+            </span>
+            {authed && (
               <form action={logoutAction}>
                 <button type="submit" className="btn ghost small">Sign out</button>
               </form>
-            </nav>
-          )}
+            )}
+          </div>
         </header>
-        <p className="mock-banner" role="note">
-          <span aria-hidden="true">⚠</span> Mock mode — fictional business, seeded data. No real ad spend, calls, or publishing.
-          Approvals are recorded; nothing goes out.
-        </p>
         <main id="main">{children}</main>
+        {authed && <Toaster />}
       </body>
     </html>
   );

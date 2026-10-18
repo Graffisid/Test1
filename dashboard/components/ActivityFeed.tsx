@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AGENT_LABEL } from "@/lib/format";
+import { AGENT_ICON, Icon } from "./Icon";
 import { StatusChip } from "./StatusChip";
 
 export interface FeedRow {
@@ -18,17 +20,28 @@ const POLL_MS = 5000;
 
 function rel(iso: string, now: number) {
   const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  if (s < 10) return "just now";
   if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
 }
 
-export function ActivityFeed({ initial, agents, renderedAt }: { initial: FeedRow[]; agents: readonly string[]; renderedAt: number }) {
+/** Back-to-back identical entries (e.g. twelve competitor ads queued) read as one line with a count. */
+function group(rows: FeedRow[]): { row: FeedRow; ids: string[] }[] {
+  const out: { row: FeedRow; ids: string[] }[] = [];
+  for (const r of rows) {
+    const last = out.at(-1);
+    if (last && last.row.agent === r.agent && last.row.decision === r.decision && last.row.status === r.status) last.ids.push(r.id);
+    else out.push({ row: r, ids: [r.id] });
+  }
+  return out;
+}
+
+/** What the AI team is doing right now, newest first, refreshed every few seconds. */
+export function ActivityFeed({ initial, renderedAt }: { initial: FeedRow[]; renderedAt: number }) {
   const [rows, setRows] = useState(initial);
-  const [agent, setAgent] = useState("");
   const [flagged, setFlagged] = useState(false);
-  const [live, setLive] = useState(true);
   const [now, setNow] = useState(renderedAt);
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [error, setError] = useState(false);
@@ -39,10 +52,7 @@ export function ActivityFeed({ initial, agents, renderedAt }: { initial: FeedRow
     let cancelled = false;
     async function load() {
       try {
-        const params = new URLSearchParams();
-        if (agent) params.set("agent", agent);
-        if (flagged) params.set("flagged", "1");
-        const res = await fetch(`/api/activity?${params}`, { cache: "no-store" });
+        const res = await fetch(`/api/activity${flagged ? "?flagged=1" : ""}`, { cache: "no-store" });
         if (!res.ok) throw new Error(String(res.status));
         const data: FeedRow[] = await res.json();
         if (cancelled) return;
@@ -59,48 +69,42 @@ export function ActivityFeed({ initial, agents, renderedAt }: { initial: FeedRow
     }
     firstLoad.current = true;
     load();
-    if (!live) return () => { cancelled = true; };
     const t = setInterval(load, POLL_MS);
     return () => { cancelled = true; clearInterval(t); };
-  }, [agent, flagged, live]);
+  }, [flagged]);
 
   return (
-    <section className="card feed" aria-labelledby="feed-title">
+    <section className="feed rise" aria-labelledby="feed-title">
       <header className="section-head">
-        <h2 id="feed-title">Agent activity</h2>
-        <span className={`live ${live && !error ? "on" : ""}`} aria-live="polite">
-          {error ? "Reconnecting…" : live ? "● Live" : "Paused"}
+        <h2 id="feed-title">What your team is doing</h2>
+        <span className={`live ${error ? "" : "on"}`} aria-live="polite">
+          <span className="live-dot" aria-hidden="true" />{error ? "Reconnecting…" : "Live"}
         </span>
       </header>
-      <div className="filters" role="group" aria-label="Filter activity">
-        <label>
-          <span className="sr-only">Agent</span>
-          <select value={agent} onChange={(e) => setAgent(e.target.value)}>
-            <option value="">All agents</option>
-            {agents.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </label>
-        <label className="toggle">
-          <input type="checkbox" checked={flagged} onChange={(e) => setFlagged(e.target.checked)} />
-          Interrupts &amp; escalations only
-        </label>
-        <button type="button" className="btn ghost small" onClick={() => setLive((v) => !v)}>
-          {live ? "Pause" : "Resume"}
+      <div className="tabs" role="group" aria-label="Show">
+        <button type="button" className={!flagged ? "on" : ""} aria-pressed={!flagged} onClick={() => setFlagged(false)}>
+          Everything
+        </button>
+        <button type="button" className={flagged ? "on" : ""} aria-pressed={flagged} onClick={() => setFlagged(true)}>
+          <Icon name="flag" /> Needs attention
         </button>
       </div>
       <ol className="feed-list">
-        {rows.length === 0 && <li className="muted">Nothing matches this filter.</li>}
-        {rows.map((r) => (
-          <li key={r.id} className={`feed-row ${fresh.has(r.id) ? "fresh" : ""} status-${r.status}`}>
-            <div className="feed-top">
-              <span className="agent">{r.agent}</span>
-              <span className="action">{r.action.replaceAll("_", " ")}</span>
-              {r.status !== "ok" && <StatusChip status={r.status} />}
-              <time dateTime={r.occurred_at} title={new Date(r.occurred_at).toLocaleString("en-CA", { timeZone: "America/Toronto" })}>
-                {rel(r.occurred_at, now)}
-              </time>
+        {rows.length === 0 && <li className="empty">Nothing here. All quiet.</li>}
+        {group(rows).map(({ row: r, ids }) => (
+          <li key={r.id} className={`feed-row ${ids.some((id) => fresh.has(id)) ? "fresh" : ""} status-${r.status}`}>
+            <span className={`who a-${r.agent}`}><Icon name={AGENT_ICON[r.agent] ?? "sparkle"} /></span>
+            <div className="feed-body">
+              <div className="feed-top">
+                <strong>{AGENT_LABEL[r.agent] ?? r.agent}</strong>
+                {r.status !== "ok" && <StatusChip status={r.status} />}
+                {ids.length > 1 && <span className="chip">×{ids.length}</span>}
+                <time dateTime={r.occurred_at} title={new Date(r.occurred_at).toLocaleString("en-CA", { timeZone: "America/Toronto" })}>
+                  {rel(r.occurred_at, now)}
+                </time>
+              </div>
+              <p>{r.decision ?? r.action.replaceAll("_", " ")}</p>
             </div>
-            {r.decision && <p className="decision">{r.decision}</p>}
           </li>
         ))}
       </ol>

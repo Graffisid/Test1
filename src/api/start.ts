@@ -31,8 +31,17 @@ if (!rows[0]?.rolsuper && !rows[0]?.member) {
   process.exit(1);
 }
 
+// Lead-capture form + opt-out (lead-qualifier), enabled when its own least-privilege login is configured.
+const captureUrl = process.env.QUALIFIER_DATABASE_URL;
+const capture = captureUrl ? {
+  pool: new pg.Pool({ connectionString: captureUrl, max: 5, statement_timeout: 10_000 }),
+  secret: required("CAPTURE_LINK_SECRET", 32),
+  trustProxy: process.env.TRUST_PROXY === "1",
+} : undefined;
+
 const server = createIngestServer({
   pool,
+  capture,
   appSecret: required("META_APP_SECRET", 16),
   verifyToken: required("META_WEBHOOK_VERIFY_TOKEN", 16),
   ownIds: new Set([process.env.META_PAGE_ID, process.env.META_INSTAGRAM_ACCOUNT_ID].filter((x): x is string => !!x)),

@@ -28,7 +28,8 @@ are no real keys, no ad spend, and no calls.
 | 2 | Signals ingestion: Meta webhooks, competitor poller, review import | Done (mock), real Meta app pending |
 | 3 | Brain (triage, ad-writer, auditor, analyst draft scoring) + approval flow + publish gate | Done (mock model; live Claude off until approved) |
 | 4 | Paid ads loop: media, launches, spend caps in the database, 48 h cycle, owner-approved reallocation | Done (simulated spend and media) |
-| 5–8 | Lead capture + 60-second callback, attribution, interrupts, hardening | Later |
+| 5 | Lead capture (approved-template replies, CASL form) + 60-second callback + booking | Done (simulated calls and calendar; consent wording is a draft for review) |
+| 6–8 | Attribution + digest reconciliation, interrupts, hardening | Later |
 
 ## Layout
 
@@ -189,6 +190,45 @@ npm run ads:cycle                # analyst: classify, file the cycle report, PRO
 - **media-producer** generates only after the copy is approved, using a
   different voice per variant. It stops and escalates before a batch would
   cost over `MEDIA_BATCH_THRESHOLD_CAD`, or after 2 failures in a row.
+
+## Lead capture and the 60-second callback (Phase 5)
+
+```bash
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- qualifier   # → QUALIFIER_DATABASE_URL
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- voice       # → VOICE_DATABASE_URL
+# + CAPTURE_LINK_SECRET and PUBLIC_BASE_URL (see .env.example)
+
+npm run ingest:start          # also serves the capture form (/c/<token>) and opt-out (/u/<token>)
+npm run voice:dispatcher      # worker: wakes on every new consented lead (Postgres NOTIFY), polls as fallback
+npm run leads:qualify         # approved-template replies with capture links; leads from Meta lead forms
+```
+
+- **lead-qualifier** replies only with an owner-approved template from
+  `MUSE.md`, word for word, plus a personal signed link.
+  - The link expires after 7 days and carries attribution to the comment and
+    the ad.
+  - Each comment gets one reply, and angry comments get none.
+  - A Meta lead form counts as consent only if it showed our exact wording.
+- **Capture form:**
+  - **Consent box:** never pre-ticked. It shows the exact CASL wording from
+    `MUSE.md` and the sender's identification. The wording, version, and time
+    are stored with every lead.
+  - **One lead per link.**
+  - **Protections:** server-side validation, a honeypot field, per-IP rate
+    limiting, and a strict CSP with no scripts.
+- **voice-dispatcher:** the call row is written **before** dialling, so a
+  crash or a duplicate wake-up can never call twice.
+  - **Attempts:** at most 2, 10 minutes apart. After two failures, the lead
+    goes to a human.
+  - **Big deals:** estimated value ≥ $5,000 goes straight to the owner and the
+    sales lead, with no AI call.
+  - **Bookings:** go to Mon–Sat business hours.
+- **CASL in the database:** a call is refused unless consent is stored and not
+  withdrawn, and the number isn't on the do-not-contact list. This holds for
+  every role.
+
+  Every confirmation page has an opt-out link, which withdraws consent for that
+  number and suppresses it.
 
 ## Dashboard
 

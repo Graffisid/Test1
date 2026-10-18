@@ -34,6 +34,10 @@ either closed and tested, or written down below with its mitigation.
 | Unexpected LLM spend | Mock model by default. Live mode needs `LLM_MODE=live` **and** `MOCK_MODE` other than `mock`. A daily cap (`LLM_DAILY_BUDGET_CAD`, default $2) is checked in code before every live call, against the activity log. | `tests/phase3-brain.test.ts` |
 | Overspending (bug, agent, or bad approval) | The caps live in the database. A trigger on every launch and budget increase checks the per-ad cap, the daily circuit breaker, the weekly projection, and any freeze, for every role including the superuser. Budgets change only through functions that re-verify a human-approved approval, and the spend role has no direct UPDATE on ads. An owner-approved change above a cap is still refused, and the refusal is logged. | `tests/phase4-paid-ads.test.ts` |
 | Burning paid media credits | Generation happens only for owner-approved copy. A batch cost threshold is checked **before** each generation. The producer stops after 2 failures in a row and escalates. | `tests/phase4-paid-ads.test.ts` |
+| Calling without consent (CASL) | A trigger refuses every outbound call unless consent is stored, not withdrawn, and the number isn't suppressed. This holds for every role. The form box is never pre-ticked. The exact wording, version, and time are stored. Opting out withdraws consent and suppresses the number, through a function, so no role edits the list directly. | `tests/phase5-callback.test.ts` |
+| Calling twice / double booking | The call row (unique key per lead and attempt) is committed **before** dialling, with at most 2 attempts. Bookings are unique per lead, and there's one lead per capture link. Resubmits, re-polls, and duplicate NOTIFYs are all tested. | `tests/phase5-callback.test.ts` |
+| Abuse of the public capture form | Links are signed (HMAC) and expire. The form has a honeypot, per-IP rate limiting, an 8 KB body cap, server-side validation, and output escaping. The CSP is `default-src 'none'` (no scripts at all), with `Referrer-Policy: no-referrer` so link tokens don't leak. | `tests/phase5-callback.test.ts` |
+| Off-script replies | lead-qualifier can only send `MUSE.md` templates. The final text is checked against the template before sending, there's one reply per comment, and anger is refused by the database. | `tests/phase5-callback.test.ts` |
 | Guardrail bypass (spending, calling, auto-replying) | Enforced in the database, not only in prompts: CASL consent trigger, human-only approval deciders, no agent replies to angry comments, unique idempotency keys. | `tests/phase1-system-of-record.test.ts` |
 
 ## Running securely
@@ -48,7 +52,7 @@ DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-logi
 #    SESSION_SECRET=<openssl rand -base64 48>
 
 # 3. Verify
-npm test                                   # root: 105 tests incl. security and Phases 2–4
+npm test                                   # root: 129 tests incl. security and Phases 2–5
 cd dashboard && npm run build && npm start
 npm run security-check                     # in another terminal: 20 HTTP-level checks
 ```

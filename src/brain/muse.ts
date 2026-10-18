@@ -41,3 +41,33 @@ export function agentPrompt(name: string): string {
   const md = readFileSync(path.join(ROOT, ".claude", "agents", `${name}.md`), "utf8");
   return md.replace(/^---[\s\S]*?---\s*/, "").trim();
 }
+
+export interface ConsentWording { version: string; text: string; identification: string }
+
+/** The CASL consent wording the capture form must show and store, verbatim, from MUSE.md. */
+export function consentWording(md = readMuse()): ConsentWording {
+  const sec = section(md, "Consent wording (CASL)");
+  const version = /\*\*Version:\*\*\s*`([^`]+)`/.exec(sec)?.[1];
+  const identification = /\*\*Sender identification[^*]*\*\*\s*([\s\S]+?)\n-/.exec(sec)?.[1].replace(/\s+/g, " ").trim();
+  const text = /\n\s*>\s*(Yes,[^\n]+)/.exec(sec)?.[1].trim();
+  if (!version || !identification || !text) throw new Error("MUSE.md consent wording section is incomplete");
+  return { version, text, identification };
+}
+
+export interface ReplyTemplate { key: string; intents: string[]; text: string }
+
+/** Owner-approved reply templates (the only replies lead-qualifier may send). */
+export function replyTemplates(md = readMuse()): ReplyTemplate[] {
+  const sec = section(md, "Approved reply templates");
+  return sec.split("\n").filter((l) => /^\|\s*`/.test(l)).map((l) => {
+    const [key, intents, text] = l.split("|").slice(1, 4).map((c) => c.trim());
+    return { key: key.replace(/`/g, ""), intents: intents.split(",").map((i) => i.trim()), text };
+  });
+}
+
+/** Big-deal threshold in CAD, from MUSE.md. */
+export function bigDealThresholdCad(md = readMuse()): number {
+  const m = /\*\*Big-deal threshold:\*\*[^$]*\$([\d,]+)/.exec(md);
+  if (!m) throw new Error("MUSE.md is missing the big-deal threshold");
+  return Number(m[1].replace(/,/g, ""));
+}

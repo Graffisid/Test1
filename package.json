@@ -23,7 +23,9 @@
     "media:produce": "tsx workflows/produce-media.ts",
     "spend:execute": "tsx workflows/execute-spend.ts",
     "ads:sync-insights": "tsx workflows/sync-insights.ts",
-    "ads:cycle": "tsx workflows/ad-cycle-48h.ts"
+    "ads:cycle": "tsx workflows/ad-cycle-48h.ts",
+    "leads:qualify": "tsx workflows/qualify-leads.ts",
+    "voice:dispatcher": "tsx workflows/voice-dispatcher.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

@@ -74,6 +74,12 @@ trigger defined here.**
    each department, and a spend freeze. Each is tested in Phase 8 and
    re-tested monthly.
 
+## Owner decisions
+
+| Date | Decision |
+|---|---|
+| 2026-10-18 | The 48-hour ad cycle judges each variant on its **last 7 days** of results. At ~$50/day, 48 hours rarely reaches the 5-lead winner bar. The cycle still runs every 48 h. |
+
 ## Approval timeouts
 
 | Item | Timeout | On timeout |
@@ -142,6 +148,31 @@ amount not confirmed by the owner, and invented reviews or star ratings.
 - Consent wording and call scripts must be reviewed before any real leads
   flow. This is a build requirement, not legal advice.
 
+## Consent wording (CASL)
+
+> **DRAFT — must be reviewed before real leads flow** (build plan Section 9). This is a build
+> requirement, not legal advice.
+
+- **Version:** `consent-v1`
+- **Sender identification (shown on the form):** Northshore Plumbing & Heating, Burlington, Ontario ·
+  (905) 555-0100 · hello@northshore.example (fictional)
+- **Checkbox wording (must be ticked by the person; never pre-ticked):**
+
+  > Yes, Northshore Plumbing & Heating may call or text me at this number about my request. I can opt out anytime by replying STOP or asking to be removed.
+
+The exact wording, version, and time are stored with every lead. Every confirmation page has an
+opt-out link. Opting out withdraws consent for that number and adds it to the do-not-contact list;
+the database then refuses any call to it.
+
+## Approved reply templates
+
+lead-qualifier may reply to comments and DMs **only** with these, word for word, with `{link}`
+replaced by a personal capture link. Anything a template doesn't cover goes to a human.
+
+| Key | For intents | Text |
+|---|---|---|
+| `capture-v1` | buying_intent, question | Thanks for reaching out! Pop your number in here and a Northshore team member will call you within a minute: {link} |
+
 ## Agent roster
 
 | Agent | Owns | Never allowed to |
@@ -181,6 +212,8 @@ deterministic mock model; live Claude calls are off until the owner approves pai
 (`LLM_MODE=live`, capped by `LLM_DAILY_BUDGET_CAD`). Publishing is simulated: nothing reaches Meta.
 Phase 4 (paid ads loop) runs on a simulated ad platform and simulated media: no money moves and no
 credits are used. The spend caps above are enforced by the database (`spend_caps`, migration 017).
+Phase 5 (lead capture + 60-second callback) runs with a simulated voice agent and calendar: no real
+call is placed. The consent wording below is a DRAFT until reviewed.
 Every external integration (Meta, TikTok,
 ElevenLabs, Twilio, Higgsfield, Google Calendar, Telegram/Slack, Anthropic API)
 is stubbed. No real API keys, no real ad spend, no real calls.

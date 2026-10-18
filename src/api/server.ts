@@ -3,6 +3,7 @@
  *   GET  /healthz         liveness, no internals
  *   GET  /webhooks/meta   Meta subscription verification (hub.verify_token → hub.challenge)
  *   POST /webhooks/meta   signed deliveries → signals
+ *   /c/<token>, /u/<token> lead-capture form and opt-out (src/api/capture.ts), when configured
  *
  * Order of checks on POST: size limit → signature (HMAC over the raw bytes) → JSON parse → ingest.
  * Nothing unsigned is ever parsed or stored. Bodies are never logged.
@@ -12,6 +13,7 @@ import { timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import { verifyMetaSignature } from "./meta-webhook.ts";
 import { ingestMetaDelivery } from "../../workflows/ingest-comments.ts";
+import { createCaptureHandler, type CaptureOptions } from "./capture.ts";
 
 export interface IngestServerOptions {
   pool: pg.Pool;
@@ -20,6 +22,8 @@ export interface IngestServerOptions {
   ownIds: Set<string>;
   maxBodyBytes?: number;
   log?: (msg: string, meta?: Record<string, unknown>) => void;
+  /** Lead-capture form + opt-out pages (lead-qualifier). Disabled when absent. */
+  capture?: CaptureOptions;
 }
 
 function send(res: ServerResponse, status: number, body: string) {
@@ -60,6 +64,7 @@ function readBody(req: IncomingMessage, limit: number): Promise<Buffer> {
 export function createIngestServer(opts: IngestServerOptions): Server {
   const limit = opts.maxBodyBytes ?? 1_000_000;
   const log = opts.log ?? ((m, meta) => console.log(m, meta ?? ""));
+  const capture = opts.capture ? createCaptureHandler(opts.capture) : null;
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -67,6 +72,7 @@ export function createIngestServer(opts: IngestServerOptions): Server {
       if (url.pathname === "/healthz") {
         return req.method === "GET" ? send(res, 200, "ok") : send(res, 405, "method not allowed");
       }
+      if (capture && (await capture(req, res, url.pathname))) return;
       if (url.pathname !== "/webhooks/meta") return send(res, 404, "not found");
 
       if (req.method === "GET") {

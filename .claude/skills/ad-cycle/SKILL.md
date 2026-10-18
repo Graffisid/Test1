@@ -10,8 +10,9 @@ Workflow: `workflows/ad-cycle-48h.ts`.
 
 ## Steps
 
-1. Collect spend, impressions, leads, and CPL for each live variant over the
-   cycle (from `metrics`).
+1. Collect spend, impressions, leads, and CPL for each live variant over a
+   **rolling 7-day window** (from `metrics`). The cycle still runs every 48
+   hours (owner decision, 2026-10-18).
 2. `analyst` classifies each variant using the winner/loser JSON schema (see
    `.claude/agents/analyst.md`). Any output that fails the schema is discarded
    and logged.

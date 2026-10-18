@@ -1,8 +1,10 @@
 /**
  * ad-cycle-48h — Paid Ads. Owner: analyst. Schedule: every 48 h (skill: .claude/skills/ad-cycle).
  *
- *  1. Collect each live variant's spend, impressions and platform-reported leads for the last 48 h
- *     of complete days (from `metrics`).
+ *  1. Collect each live variant's spend, impressions and platform-reported leads over a rolling
+ *     7-day window of complete days (owner decision 2026-10-18: the cycle still runs every 48 h, but at
+ *     this budget 48 h of data rarely reaches the 5-lead bar). Days before a variant went live don't
+ *     count as missing data.
  *  2. Classify winner / loser / unproven with the Section 8 rules (src/lib/classify.ts); the full
  *     verdict JSON is stored on the variant.
  *  3. Propose ONE reallocation for the owner: +20% for ads with a winner (within the per-ad cap),
@@ -32,7 +34,7 @@ export interface CycleReport {
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 export async function runAdCycle(db: pg.ClientBase, opts: { now?: Date; windowDays?: number; cycleKey?: string } = {}): Promise<CycleReport> {
-  const windowDays = opts.windowDays ?? 2;
+  const windowDays = opts.windowDays ?? Number(process.env.AD_CYCLE_WINDOW_DAYS || 7);
   const days = completeDays(windowDays, opts.now);
   const window = { start: days[0], end: days[days.length - 1] };
   const cycleKey = opts.cycleKey ?? `cycle:${window.end}`;
@@ -50,12 +52,13 @@ export async function runAdCycle(db: pg.ClientBase, opts: { now?: Date; windowDa
 
   const { rows } = await db.query<{
     ad_id: string; ad_name: string; budget: number; target_cpl: number | null; variant_id: string; label: string; headline: string;
-    spend: number; impressions: number; leads: number; days_with_data: number;
+    spend: number; impressions: number; leads: number; days_with_data: number; days_expected: number;
   }>(
     `SELECT a.id AS ad_id, a.name AS ad_name, a.daily_budget_cad::float AS budget, a.target_cpl_cad::float AS target_cpl,
             v.id AS variant_id, v.label, v.headline,
             COALESCE(sum(m.spend_cad), 0)::float AS spend, COALESCE(sum(m.impressions), 0)::int AS impressions,
-            COALESCE(sum(m.platform_leads), 0)::int AS leads, count(m.id)::int AS days_with_data
+            COALESCE(sum(m.platform_leads), 0)::int AS leads, count(m.id)::int AS days_with_data,
+            ($2::date - GREATEST($1::date, COALESCE((v.published_at AT TIME ZONE 'America/Toronto')::date, $1::date)) + 1)::int AS days_expected
      FROM ads a JOIN ad_variants v ON v.ad_id = a.id AND v.status = 'live'
      LEFT JOIN metrics m ON m.ad_variant_id = v.id AND m.metric_date BETWEEN $1::date AND $2::date
      WHERE a.status = 'live'
@@ -65,10 +68,10 @@ export async function runAdCycle(db: pg.ClientBase, opts: { now?: Date; windowDa
   for (const r of rows) {
     const target = r.target_cpl ?? 40;
     let v = classifyVariant({ ad_variant_id: r.variant_id, spend: r.spend, impressions: r.impressions, leads: r.leads }, target);
-    if (r.days_with_data < windowDays) {
+    if (r.days_with_data < r.days_expected) {
       // Escalation rule: attribution data missing for a spend decision → recommend "hold", not "spend".
       v = { ...v, classification: "unproven", recommended_action: "hold", budget_delta_pct: 0,
-        reasons: [...v.reasons, `data for only ${r.days_with_data} of ${windowDays} days — holding`] };
+        reasons: [...v.reasons, `data for only ${r.days_with_data} of ${r.days_expected} live days — holding`] };
     }
     verdicts.push({ ...v, label: r.label, ad_name: r.ad_name, days_with_data: r.days_with_data });
     await db.query(`UPDATE ad_variants SET classification = $2, score_breakdown = $3 WHERE id = $1`,

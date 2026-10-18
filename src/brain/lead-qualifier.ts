@@ -17,7 +17,7 @@ import { bigDealThresholdCad, consentWording, replyTemplates } from "./muse.ts";
 
 export interface QualifierConfig { baseUrl: string; secret: string }
 
-export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Promise<{ replied: number; handedOff: number }> {
+export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Promise<{ replied: number; handedOff: number; links: string[] }> {
   const templates = replyTemplates();
   const { rows } = await db.query<{ comment_id: string; signal_id: string; intent: string; ad_id: string | null; ad_variant_id: string | null }>(
     `SELECT c.id AS comment_id, c.signal_id, c.intent, c.ad_id, c.ad_variant_id
@@ -26,6 +26,7 @@ export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Pr
        AND c.sentiment IS DISTINCT FROM 'angry'
      ORDER BY s.received_at LIMIT 100`);
   let replied = 0, handedOff = 0;
+  const links: string[] = [];
   for (const r of rows) {
     const template = templates.find((t) => t.intents.includes(r.intent));
     await db.query("BEGIN");
@@ -54,6 +55,7 @@ export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Pr
             [`Replied with approved template ${template.key} (simulated — not sent to Meta)`, r.comment_id, `log:reply:${r.comment_id}`,
              JSON.stringify({ template: template.key })]);
           replied++;
+          links.push(link);
         }
       }
       await db.query("COMMIT");
@@ -62,7 +64,7 @@ export async function replyToBuyers(db: pg.ClientBase, cfg: QualifierConfig): Pr
       throw err;
     }
   }
-  return { replied, handedOff };
+  return { replied, handedOff, links };
 }
 
 /** What Meta's lead-form API returns for a submission (simulated in this build). */

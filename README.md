@@ -66,6 +66,39 @@ for local development only.
 The schema, guardrails, and KPI views are documented in
 [`db/schema.md`](./db/schema.md).
 
+### Sandbox: click through the whole platform
+
+```bash
+npm install && (cd dashboard && npm install)
+npm run sandbox            # or: npm run sandbox -- --keep  (keeps current data)
+```
+
+This command:
+
+- Resets the **local** database to fresh seed data. It refuses to run against
+  any other host.
+- Creates every least-privilege login with a new random password.
+- Starts three services:
+  - The webhook receiver and capture form, on port 3001.
+  - The voice dispatcher.
+  - The dashboard, at <http://127.0.0.1:3000>.
+- Prints a one-time owner password.
+
+The passwords and service URLs are written to `.sandbox/`. That folder is
+gitignored and readable only by you. `dashboard/.env.local` is never touched.
+Everything external stays simulated. Ctrl-C stops it all.
+
+To act as the outside world and the agents, open a second terminal:
+
+```bash
+set -a; . .sandbox/sandbox.env; set +a
+npm run simulate:meta && npm run brain:triage
+npm run leads:qualify        # prints capture links: open one, fill the form, watch the call get booked
+npm run brain:write-ads -- "Furnace Tune-Up"     # then Approve a draft in the dashboard
+npm run media:produce && npm run publish:approved
+npm run spend:execute        # after approving a budget change
+```
+
 ## Signals ingestion (Phase 2)
 
 ```bash

@@ -18,6 +18,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const f = await leadsFromLeadForms(db);
     console.log(`lead-qualifier: ${r.replied} capture-link repl(ies), ${r.handedOff} handed to a human; ` +
       `${f.created} lead(s) from Meta forms, ${f.withoutConsent} without valid consent`);
+    // Replies aren't sent anywhere yet, so print the links: open one to play the commenter.
+    if (process.env.MOCK_MODE === "mock") for (const l of r.links) console.log(`  capture link (simulated reply): ${l}`);
   } finally {
     await db.end();
   }

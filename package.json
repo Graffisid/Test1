@@ -8,6 +8,7 @@
   "scripts": {
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
+    "sandbox": "tsx scripts/sandbox.ts",
     "db:reset": "tsx db/migrate.ts --reset && tsx db/seed.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",

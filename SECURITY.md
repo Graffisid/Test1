@@ -32,6 +32,8 @@ either closed and tested, or written down below with its mitigation.
 | Model output acted on blindly | Every response is validated against a Zod schema in code (mock or live). Invalid or refused output is discarded and logged: triage routes the signal to a human, and ad-writer queues nothing. Routing rules (anger, confidence below 0.70) override the model, and a database constraint backs them up. | `tests/phase3-brain.test.ts` |
 | Prompt injection reaching an action | Public text goes to the model only inside `<untrusted_customer_text>`, with an instruction to treat it as data. The triage role can't send anything anywhere. A hostile DM is a test fixture, and it ends up routed to a human with low confidence. | `tests/phase3-brain.test.ts` |
 | Unexpected LLM spend | Mock model by default. Live mode needs `LLM_MODE=live` **and** `MOCK_MODE` other than `mock`. A daily cap (`LLM_DAILY_BUDGET_CAD`, default $2) is checked in code before every live call, against the activity log. | `tests/phase3-brain.test.ts` |
+| Overspending (bug, agent, or bad approval) | The caps live in the database. A trigger on every launch and budget increase checks the per-ad cap, the daily circuit breaker, the weekly projection, and any freeze, for every role including the superuser. Budgets change only through functions that re-verify a human-approved approval, and the spend role has no direct UPDATE on ads. An owner-approved change above a cap is still refused, and the refusal is logged. | `tests/phase4-paid-ads.test.ts` |
+| Burning paid media credits | Generation happens only for owner-approved copy. A batch cost threshold is checked **before** each generation. The producer stops after 2 failures in a row and escalates. | `tests/phase4-paid-ads.test.ts` |
 | Guardrail bypass (spending, calling, auto-replying) | Enforced in the database, not only in prompts: CASL consent trigger, human-only approval deciders, no agent replies to angry comments, unique idempotency keys. | `tests/phase1-system-of-record.test.ts` |
 
 ## Running securely
@@ -46,7 +48,7 @@ DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-logi
 #    SESSION_SECRET=<openssl rand -base64 48>
 
 # 3. Verify
-npm test                                   # root: 88 tests incl. security, Phase 2 and Phase 3
+npm test                                   # root: 105 tests incl. security and Phases 2–4
 cd dashboard && npm run build && npm start
 npm run security-check                     # in another terminal: 20 HTTP-level checks
 ```

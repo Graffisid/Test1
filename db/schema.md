@@ -40,6 +40,10 @@ forced onto an ad.
 | `tracked_competitors` | The defined competitor set the poller watches | — (`UNIQUE(page_id)`) |
 | `competitor_ads` | One competitor ad, with first/last seen, active flag, rubric breakdown, and verdict | — (`UNIQUE(ad_archive_id)`) |
 | `publications` | One executed publish of a human-approved approval (simulated in this build) | `publish:<approval id>`, **NOT NULL**, plus `UNIQUE(approval_id)` |
+| `spend_caps` | The one row of spend caps (weekly, per-ad, circuit breaker, frozen); mirrors MUSE.md | — |
+| `ad_budget_changes` | One executed budget change, linked to the approval that allowed it | `budget:<approval>:<ad>`, plus `UNIQUE(approval_id, ad_id)` |
+| `media_assets` | A generated video or voiceover for a variant, with provider, voice, cost, and status | `media:<variant>:<kind>` |
+| `cycle_reports` | The analyst's 48 h cycle report: verdicts, winner, proposal | — (`UNIQUE(cycle_key)`) |
 | `metrics` | Daily platform numbers per variant: spend, impressions, clicks, platform leads | — (`UNIQUE(metric_date, ad_variant_id)`) |
 | `agent_activity_log` | Every agent decision and every outbound action | Set for outbound actions |
 
@@ -63,6 +67,7 @@ forced onto an ad.
 | Ingest services can only add raw signals and competitor sightings | Role `ingest_app` (migration 015): `INSERT` on signals, insert and column-level update on competitor_ads, `INSERT` on the log; **no access to leads, approvals, or ads** |
 | Nothing publishes without a human approval | Trigger `publications_gate` (approved, human decider, kind matches, decided before expiry); deferred trigger `ad_variants_live_gate` (live ⇒ publication exists); publications append-only |
 | Agents request approvals, never decide them | Role `brain_app` (migration 016): column-level `INSERT` on approvals and ad_variants without status or decision columns |
+| Spend caps can't be exceeded | Trigger `ads_spend_cap` (per-ad, circuit breaker, weekly projection via `projected_week_spend()`, freeze) on every launch and increase; budgets change only through `launch_ad` / `apply_budget_change` / `kill_variant`, which re-verify a human approval |
 | Signal provenance is never hidden | `signals.ingested_via` ∈ webhook / poller / manual_import / simulator / seed |
 | Audit log can't be edited or deleted, by anyone | Trigger `agent_activity_log_no_update_delete`; the `approval_id` foreign key is `ON DELETE RESTRICT` |
 

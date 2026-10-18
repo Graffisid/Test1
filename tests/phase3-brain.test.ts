@@ -23,6 +23,7 @@ import { brandRules } from "../src/brain/muse.ts";
 import { TriageOutput } from "../src/brain/schemas.ts";
 import { triagePending } from "../workflows/triage-signals.ts";
 import { publishApproved } from "../workflows/publish-approved.ts";
+import { produceMedia } from "../workflows/produce-media.ts";
 
 const base = new URL(databaseUrl());
 const testDb = `ai_social_p3_${process.pid}_${Date.now()}`;
@@ -31,7 +32,7 @@ testUrl.pathname = `/${testDb}`;
 
 let admin: pg.Client;
 const pools: Record<string, pg.Pool> = {};
-const asRole = async <T>(role: "brain_app" | "publisher_app" | "dashboard_app", fn: (c: pg.PoolClient) => Promise<T>) => {
+const asRole = async <T>(role: "brain_app" | "publisher_app" | "dashboard_app" | "media_app", fn: (c: pg.PoolClient) => Promise<T>) => {
   const c = await pools[role].connect();
   try { return await fn(c); } finally { c.release(); }
 };
@@ -43,7 +44,7 @@ before(async () => {
   await seed(testUrl.toString());
   admin = new pg.Client({ connectionString: testUrl.toString() });
   await admin.connect();
-  for (const role of ["brain_app", "publisher_app", "dashboard_app"]) {
+  for (const role of ["brain_app", "publisher_app", "dashboard_app", "media_app"]) {
     pools[role] = new pg.Pool({ connectionString: testUrl.toString(), options: `-c role=${role}`, max: 2 });
   }
   // Fresh, unclassified signals — exactly what the webhook receiver produces.
@@ -224,7 +225,15 @@ describe("the publish gate (iron rule)", () => {
     });
   });
 
+  test("the publisher holds an approved draft until its media is ready", async () => {
+    const r = await asRole("publisher_app", (c) => publishApproved(c));
+    assert.equal(r.published.length, 0);
+    assert.match(r.held.find((h) => h.approvalId === approvedId)!.reason, /media/);
+  });
+
   test("the publisher publishes the approved draft exactly once, and never the rejected or pending ones", async () => {
+    const media = await asRole("media_app", (c) => produceMedia(c));
+    assert.equal(media.generated, 2, "video + voiceover for the one approved draft only");
     const first = await asRole("publisher_app", (c) => publishApproved(c));
     assert.deepEqual(first.published.map((p) => p.approvalId), [approvedId]);
     const second = await asRole("publisher_app", (c) => publishApproved(c));

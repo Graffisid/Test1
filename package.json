@@ -19,7 +19,11 @@
     "reviews:import": "tsx src/tools/import-reviews.ts",
     "brain:triage": "tsx workflows/triage-signals.ts",
     "brain:write-ads": "tsx workflows/write-ads.ts",
-    "publish:approved": "tsx workflows/publish-approved.ts"
+    "publish:approved": "tsx workflows/publish-approved.ts",
+    "media:produce": "tsx workflows/produce-media.ts",
+    "spend:execute": "tsx workflows/execute-spend.ts",
+    "ads:sync-insights": "tsx workflows/sync-insights.ts",
+    "ads:cycle": "tsx workflows/ad-cycle-48h.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

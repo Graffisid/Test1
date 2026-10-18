@@ -27,7 +27,8 @@ are no real keys, no ad spend, and no calls.
 | — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Done |
 | 2 | Signals ingestion: Meta webhooks, competitor poller, review import | Done (mock), real Meta app pending |
 | 3 | Brain (triage, ad-writer, auditor, analyst draft scoring) + approval flow + publish gate | Done (mock model; live Claude off until approved) |
-| 4–8 | Paid ads loop, callbacks, attribution, interrupts, hardening | Later |
+| 4 | Paid ads loop: media, launches, spend caps in the database, 48 h cycle, owner-approved reallocation | Done (simulated spend and media) |
+| 5–8 | Lead capture + 60-second callback, attribution, interrupts, hardening | Later |
 
 ## Layout
 
@@ -149,6 +150,45 @@ npm run publish:approved                      # the ONLY publish path (simulated
     (`messages.parse`), at `low` effort for triage and `medium` for ad-writer.
   - **Daily cap:** live calls are capped per day by `LLM_DAILY_BUDGET_CAD`,
     checked in code against the activity log.
+
+## Paid ads loop (Phase 4)
+
+```bash
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- media   # → MEDIA_DATABASE_URL
+DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- spend   # → SPEND_DATABASE_URL
+
+npm run spend:execute            # launches + budget changes the OWNER approved (simulated spend)
+npm run media:produce            # video + voiceover for approved variants (simulated, no credits)
+npm run publish:approved         # publishes approved variants once their media is ready
+npm run ads:sync-insights -- --days 2   # simulated daily results → metrics
+npm run ads:cycle                # analyst: classify, file the cycle report, PROPOSE a reallocation
+```
+
+- **Spend caps** are in the database: table `spend_caps`, with a trigger on
+  every launch and every budget increase, for every role including the
+  superuser.
+  - **Per-ad daily cap:** $40.
+  - **Daily circuit breaker:** $100 across all live ads.
+  - **Weekly cap:** this week's actual spend plus the remaining days at
+    current budgets must stay at or under $500.
+  - **Freeze:** a spend freeze blocks every increase.
+
+  Decreases and pauses are never blocked.
+- **Executor:** launches and budget changes happen only through database
+  functions (`launch_ad`, `apply_budget_change`, `kill_variant`). Each one
+  re-verifies a human-approved approval.
+  - The spend role has **no** direct UPDATE on ads.
+  - One approval gives at most one change per ad.
+  - A refused change is logged as a `budget_limit_reached` block.
+- **48 h cycle** (`workflows/ad-cycle-48h.ts`):
+  - **Classify:** each live variant is classified with the Section 8 rules.
+  - **Report:** the cycle files a report naming the winner with its data.
+  - **Propose:** it proposes, never executes, a +20% budget for ads with a
+    winner (inside the caps), kills losers, and pauses all-loser ads. Missing
+    data means "hold".
+- **media-producer** generates only after the copy is approved, using a
+  different voice per variant. It stops and escalates before a batch would
+  cost over `MEDIA_BATCH_THRESHOLD_CAD`, or after 2 failures in a row.
 
 ## Dashboard
 

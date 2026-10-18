@@ -179,6 +179,8 @@ difference.
 simulated deliveries have been sent so far (no Meta app yet). The brain (triage, ad-writer) runs on a
 deterministic mock model; live Claude calls are off until the owner approves paid usage
 (`LLM_MODE=live`, capped by `LLM_DAILY_BUDGET_CAD`). Publishing is simulated: nothing reaches Meta.
+Phase 4 (paid ads loop) runs on a simulated ad platform and simulated media: no money moves and no
+credits are used. The spend caps above are enforced by the database (`spend_caps`, migration 017).
 Every external integration (Meta, TikTok,
 ElevenLabs, Twilio, Higgsfield, Google Calendar, Telegram/Slack, Anthropic API)
 is stubbed. No real API keys, no real ad spend, no real calls.

@@ -20,17 +20,24 @@ const PUBLISHABLE = ["ad_variant", "organic_post", "reputation_reply"];
 
 export async function publishApproved(db: pg.ClientBase): Promise<PublishResult> {
   const out: PublishResult = { published: [], held: [] };
-  const { rows } = await db.query<{ id: string; kind: string; title: string; ad_variant_id: string | null; ad_status: string | null }>(
-    `SELECT a.id, a.kind, a.title, a.ad_variant_id, ad.status AS ad_status
+  const { rows } = await db.query<{ id: string; kind: string; title: string; ad_variant_id: string | null; ad_status: string | null;
+    media_ready: boolean }>(
+    `SELECT a.id, a.kind, a.title, a.ad_variant_id, ad.status AS ad_status,
+            (v.video_url IS NOT NULL AND v.voiceover_url IS NOT NULL) AS media_ready
      FROM approvals a
      LEFT JOIN publications p ON p.approval_id = a.id
      LEFT JOIN ads ad ON ad.id = a.ad_id
+     LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
      WHERE a.status = 'approved' AND p.id IS NULL AND a.kind = ANY($1)
      ORDER BY a.decided_at`, [PUBLISHABLE]);
 
   for (const a of rows) {
     if (a.kind === "ad_variant" && a.ad_status !== "live") {
       out.held.push({ approvalId: a.id, reason: `ad is ${a.ad_status ?? "missing"}, not live` });
+      continue;
+    }
+    if (a.kind === "ad_variant" && !a.media_ready) {
+      out.held.push({ approvalId: a.id, reason: "video/voiceover not ready — run media:produce" });
       continue;
     }
     await db.query("BEGIN");

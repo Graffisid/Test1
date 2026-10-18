@@ -103,14 +103,14 @@ export async function approveAction(_prev: ActionState | null, form: FormData): 
     const dept = row.kind === "budget_reallocation" ? "paid_ads" : row.kind === "reputation_reply" ? "reputation" : "publishing";
     await log(client, "owner", "approve", `Approved: ${row.title}${factChecked ? " (owner verified the flagged claim)" : ""}`, id, "ok", dept);
     await log(client, "system", "publish_deferred",
-      row.kind === "budget_reallocation"
-        ? "Approval recorded. Budget change NOT executed — spend path not built yet (mock mode, Phase 4)."
+      row.kind === "budget_reallocation" || row.kind === "ad_launch"
+        ? "Approval recorded. The spend executor applies it on its next run, within the spend caps (simulated spend)."
         : "Approval recorded. The publisher will post it on its next run (simulated — nothing reaches Meta yet).",
       id, "ok", dept);
     return {
       ok: true,
-      message: row.kind === "budget_reallocation"
-        ? "Approved. Recorded — the budget change itself isn't built yet (Phase 4), so nothing was spent."
+      message: row.kind === "budget_reallocation" || row.kind === "ad_launch"
+        ? "Approved. The spend executor applies it on its next run — the database still enforces the spend caps (simulated spend)."
         : "Approved. It will publish on the publisher's next run (simulated in this build).",
     };
   }) as Promise<ActionState>;

@@ -307,7 +307,10 @@ follows reach → enquiries → callbacks → bookings → paid, and shows money
 or WhatsApp (an SVG poster built from the checked text), with Approve & schedule, Decline with a note, Edit text, and
 Send to my WhatsApp. **Your team** shows six roles (social media, calls, texts, assistant, bookings, manager), each built
 from real rows: last 7 days vs the week before, a 12-week graph, a live feed, an auto-written weekly report and the
-rules it can't break (`dashboard/lib/team.ts`). The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
+rules it can't break (`dashboard/lib/team.ts`). **Customers** is a day-by-day timeline of every enquiry (channel, request,
+how far they got, filters by period, channel, stage and name), and each person's page opens with their journey —
+reached out → details & consent → callback or text → booked → paid, with the time between steps — above the full
+audit trail. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
 
 ```bash
 # once: least-privilege DB login for the dashboard (never the superuser)

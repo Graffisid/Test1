@@ -1,3 +1,5 @@
+import type { IconName } from "@/components/Icon";
+
 export const TZ = "America/Toronto";
 
 export function money(n: number | null | undefined, opts: { cents?: boolean } = {}): string {
@@ -54,18 +56,28 @@ export const SERVICE_LABEL: Record<string, string> = {
 };
 
 /** Plain-language names for the agents, for people who don't know the roster. */
+/** Agent names, as the six teammates on the "Your team" screen (internal agent → the role the owner sees). */
 export const AGENT_LABEL: Record<string, string> = {
-  "growth-director": "Team manager",
-  triage: "Inbox sorter",
-  "ad-writer": "Ad writer",
-  "media-producer": "Video studio",
-  "lead-qualifier": "Lead catcher",
-  "voice-dispatcher": "Phone assistant",
-  analyst: "Analyst",
-  "reputation-guard": "Review guard",
+  "growth-director": "Manager",
+  triage: "Social media",
+  "ad-writer": "Social media",
+  "media-producer": "Social media",
+  "reputation-guard": "Social media",
+  analyst: "Social media",
+  "lead-qualifier": "Assistant",
+  "voice-dispatcher": "Calls & texts",
   owner: "You",
   system: "System",
 };
+
+/** The inbox sorter logs "intent (confidence) → route"; say it the way the owner would. */
+export function plainDecision(action: string, decision: string | null): string {
+  if (action !== "classify_signal" || !decision) return decision ?? action.replaceAll("_", " ");
+  const m = /^(\w+) \([\d.]+\) → ([\w-]+)/.exec(decision);
+  if (!m) return decision;
+  const to: Record<string, string> = { "lead-qualifier": "the assistant", human: "you", "reputation-guard": "review replies", ignore: "no reply needed" };
+  return `Sorted the message as ${m[1].replaceAll("_", " ")} → ${to[m[2]] ?? m[2].replaceAll("-", " ")}`;
+}
 
 /** What each kind of approval is, and what happens if the owner says yes. */
 export const KIND_COPY: Record<string, { label: string; ifApproved: string }> = {
@@ -83,3 +95,13 @@ export function phonePretty(e164: string | null | undefined): string | null {
   const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164);
   return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164;
 }
+
+/** How a customer first reached out, in the owner's words. */
+export const CHANNEL: Record<string, { label: string; icon: IconName; tone: string }> = {
+  facebook_comment: { label: "Facebook comment", icon: "chat", tone: "fb" },
+  facebook_dm: { label: "Facebook message", icon: "inbox", tone: "fb" },
+  instagram_comment: { label: "Instagram comment", icon: "chat", tone: "ig" },
+  instagram_dm: { label: "Instagram message", icon: "inbox", tone: "ig" },
+  lead_form: { label: "Facebook lead form", icon: "post", tone: "fb" },
+  quote_form: { label: "Website quote form", icon: "post", tone: "web" },
+};

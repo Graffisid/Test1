@@ -7,7 +7,7 @@ import { TrendProjection } from "@/components/charts/TrendProjection";
 import { fmt } from "@/components/charts/fmt";
 import { OWNER_NAME } from "@/lib/db";
 import { requireOwnerPage } from "@/lib/session";
-import { AGENT_LABEL, TZ, relative } from "@/lib/format";
+import { AGENT_LABEL, TZ, plainDecision, relative } from "@/lib/format";
 import { expireStaleApprovals, getActivity, getOverview, getPendingApprovals } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -124,7 +124,7 @@ export default async function Overview() {
           <header className="card-head"><h2 id="act-title">Your team, just now</h2></header>
           <ul className="plain mini-list">
             {activity.map((a) => (
-              <li key={a.id}><div><strong>{AGENT_LABEL[a.agent] ?? a.agent}</strong><span className="small">{a.decision}</span><span className="muted small">{relative(a.occurred_at, now)}</span></div></li>
+              <li key={a.id}><div><strong>{AGENT_LABEL[a.agent] ?? a.agent}</strong><span className="small">{plainDecision(a.action, a.decision)}</span><span className="muted small">{relative(a.occurred_at, now)}</span></div></li>
             ))}
           </ul>
         </section>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AGENT_LABEL } from "@/lib/format";
+import { AGENT_LABEL, plainDecision } from "@/lib/format";
 import { AGENT_ICON, Icon } from "./Icon";
 import { StatusChip } from "./StatusChip";
 
@@ -103,7 +103,7 @@ export function ActivityFeed({ initial, renderedAt }: { initial: FeedRow[]; rend
                   {rel(r.occurred_at, now)}
                 </time>
               </div>
-              <p>{r.decision ?? r.action.replaceAll("_", " ")}</p>
+              <p>{plainDecision(r.action, r.decision)}</p>
             </div>
           </li>
         ))}

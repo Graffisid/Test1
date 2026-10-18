@@ -13,7 +13,7 @@ const STEPS: { title: string; body: string; behind: string }[] = [
     behind: "The phone is pretend; everything it sends goes into the real platform through signed webhooks, like Facebook and Twilio would." },
   { title: "Comment on the post as a customer",
     body: "Keep the example (“How much for a furnace tune-up?”) or type your own, then tap Comment. Within seconds Northshore replies publicly with a personal quote link.",
-    behind: "Inbox sorter classifies the comment as buying intent and traces it to the exact ad. Lead catcher replies with an approved template only." },
+    behind: "The social media teammate sorts the comment as buying intent and traces it to the exact ad. The assistant replies with an approved template only." },
   { title: "Tap “Get a quote →” and fill in the form",
     body: "Name, phone, service, choose “Text me a quote”, tick the consent box, Send.",
     behind: "The consent wording, version and time are stored with the lead (CASL). The link works once and expires." },

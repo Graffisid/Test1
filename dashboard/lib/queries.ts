@@ -1,6 +1,6 @@
 import "server-only";
 import { q } from "./db";
-import { SERVICE_LABEL } from "./format";
+import { AGENT_LABEL, SERVICE_LABEL, plainDecision } from "./format";
 
 const TODAY = `(now() AT TIME ZONE 'America/Toronto')::date`;
 
@@ -311,8 +311,11 @@ export interface CustomerAudit {
   source: { platform: string | null; kind: string | null; ad_name: string | null; variant_label: string | null; headline: string | null;
     post_id: string | null; published_at: string | null; comment: string | null; commented_at: string | null; author: string | null } | null;
   quote: { service: string; price_cad: number | null; price_basis: string; status: string; chosen_slot: string | null } | null;
-  appointment: { status: string; scheduled_for: string; calendar_event_id: string | null } | null;
+  appointment: { status: string; scheduled_for: string; calendar_event_id: string | null; created_at: string; paid_at: string | null;
+    paid_amount_cad: number | null } | null;
   events: AuditEvent[];
+  /** The customer's journey, step by step, with the time each step happened (null = not reached). */
+  journey: { key: string; label: string; at: string | null }[];
 }
 
 const platformName = (p: string | null) => (p === "instagram" ? "Instagram" : "Facebook");
@@ -345,7 +348,8 @@ export async function getCustomerAudit(id: string): Promise<CustomerAudit | null
   const [quote] = await q<NonNullable<CustomerAudit["quote"]>>(
     `SELECT service, price_cad, price_basis, status, chosen_slot FROM quotes WHERE lead_id = $1`, [id]);
   const [appointment] = await q<NonNullable<CustomerAudit["appointment"]>>(
-    `SELECT status, scheduled_for, calendar_event_id FROM appointments WHERE lead_id = $1 ORDER BY created_at DESC LIMIT 1`, [id]);
+    `SELECT status, scheduled_for, calendar_event_id, created_at, paid_at, paid_amount_cad FROM appointments WHERE lead_id = $1
+     ORDER BY created_at DESC LIMIT 1`, [id]);
   const messages = await q<{ id: string; direction: string; body: string; sent_at: string; template_key: string | null; provider_message_id: string | null }>(
     `SELECT id, direction, body, sent_at, template_key, provider_message_id FROM messages WHERE lead_id = $1 ORDER BY sent_at, created_at`, [id]);
   const calls = await q<{ attempt: number; started_at: string; outcome: string; duration_s: number | null; transcript_summary: string | null; idempotency_key: string }>(
@@ -369,28 +373,26 @@ export async function getCustomerAudit(id: string): Promise<CustomerAudit | null
       ref: `received via ${src.ingested_via ?? "webhook"} (signed)` });
   }
   // Agent and owner actions, in their own words (the reply, the quote, each text, the booking, the decision).
-  const ACTOR: Record<string, string> = { triage: "Inbox sorter", "lead-qualifier": "Lead catcher", "voice-dispatcher": "Phone assistant",
-    "growth-director": "Team manager", owner: "You", system: "System", analyst: "Analyst", "ad-writer": "Ad writer",
-    "media-producer": "Video studio", "reputation-guard": "Review guard" };
+  const ACTOR = AGENT_LABEL;
   for (const l of logs) {
     if (l.action === "send_capture_link") continue; // shown below with the reply's actual words
-    events.push({ at: l.occurred_at, actor: ACTOR[l.agent] ?? l.agent, title: l.decision ?? l.action.replaceAll("_", " "),
+    events.push({ at: l.occurred_at, actor: ACTOR[l.agent] ?? l.agent, title: plainDecision(l.action, l.decision),
       tone: l.agent === "owner" ? "owner" : l.status === "ok" ? "agent" : "alert", ref: l.idempotency_key });
   }
   if (src?.reply_text && src.replied_at) {
-    events.push({ at: src.replied_at, actor: "Lead catcher", tone: "agent", title: "Public reply posted under the comment",
+    events.push({ at: src.replied_at, actor: "Assistant", tone: "agent", title: "Public reply posted under the comment",
       detail: `“${src.reply_text.replace(/https?:\/\/\S+/, "[personal quote link]")}”` });
   }
   events.push({ at: lead.created_at, actor: lead.name, tone: "customer", title: "Filled in the quote form",
     detail: `${lead.consent_given ? "Ticked the consent box. " : ""}Asked to be ${lead.contact_pref === "text" ? "texted" : "called"}.`,
     ref: lead.capture_token_id ? `link ${lead.capture_token_id.slice(0, 8)} (one use)` : lead.idempotency_key });
   for (const m of messages) {
-    events.push({ at: m.sent_at, actor: m.direction === "inbound" ? lead.name : "Phone assistant",
+    events.push({ at: m.sent_at, actor: m.direction === "inbound" ? lead.name : "Calls & texts",
       tone: m.direction === "inbound" ? "customer" : "agent",
       title: m.direction === "inbound" ? "Texted back" : `Sent a text (${m.template_key})`, detail: `“${m.body}”`, ref: m.provider_message_id });
   }
   for (const c of calls) {
-    events.push({ at: c.started_at, actor: "Phone assistant", tone: "agent", title: `Called — attempt ${c.attempt}: ${c.outcome.replaceAll("_", " ")}`,
+    events.push({ at: c.started_at, actor: "Calls & texts", tone: "agent", title: `Called — attempt ${c.attempt}: ${c.outcome.replaceAll("_", " ")}`,
       detail: c.transcript_summary, ref: c.idempotency_key });
   }
   // Owner decisions are already in the log. An expiry has no actor, so it is added here.
@@ -402,8 +404,20 @@ export async function getCustomerAudit(id: string): Promise<CustomerAudit | null
   }
   events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 
+  // A personal callback or text — not the public reply under their comment.
+  const firstReply = [calls[0]?.started_at, messages.find((m) => m.direction === "outbound")?.sent_at]
+    .filter((x): x is string => !!x).sort()[0] ?? null;
+  const journey = [
+    ...(src?.published_at ? [{ key: "saw", label: `Saw your ${src.kind === "lead_form" ? "ad" : "post"}`, at: src.published_at }] : []),
+    { key: "contact", label: src?.comment ? `${src.kind?.includes("dm") ? "Messaged" : "Commented"} on ${platformName(src.platform)}` : "Reached out", at: src?.commented_at ?? src?.form_signal_at ?? lead.created_at },
+    { key: "details", label: "Left details & consent", at: lead.created_at },
+    { key: "reply", label: lead.contact_pref === "text" ? "Got a text quote" : "Got a callback", at: firstReply },
+    { key: "booked", label: "Booked a visit", at: appointment && appointment.status !== "cancelled" ? appointment.created_at : null },
+    { key: "paid", label: "Job done & paid", at: appointment?.paid_at ?? null },
+  ];
+
   return {
-    lead, quote: quote ?? null, appointment: appointment ?? null, events,
+    lead, quote: quote ?? null, appointment: appointment ?? null, events, journey,
     source: src ? { platform: src.platform, kind: src.kind, ad_name: src.ad_name, variant_label: src.variant_label, headline: src.headline,
       post_id: src.post_id, published_at: src.published_at, comment: src.comment, commented_at: src.commented_at, author: src.author } : null,
   };
@@ -549,4 +563,42 @@ export async function getReviewItems(): Promise<{ pending: ReviewRow[]; whatsapp
     q<{ address_e164: string; auto_send: boolean }>(`SELECT address_e164, auto_send FROM owner_channels WHERE channel = 'whatsapp' AND enabled LIMIT 1`),
   ]);
   return { pending, whatsapp: { on: wa[0]?.on ?? false, number: ch[0] ? `••••${ch[0].address_e164.slice(-4)}` : null, auto: ch[0]?.auto_send ?? false } };
+}
+
+// ------------------------------------------------------------- customer timeline ----
+
+export interface TimelineRow {
+  id: string; name: string; created_at: string; channel: string; service_requested: string; contact_pref: string; status: string;
+  ad_name: string | null; reached_at: string | null; booked: boolean; appt_status: string | null; paid: number | null; consent: boolean;
+}
+export interface TimelineFilter { days: number; channel: string | null; stage: string | null; q: string | null }
+
+/** Everyone who reached out in the period, newest first, with the channel they used and how far they got. */
+export async function getCustomerTimeline(f: TimelineFilter): Promise<{ rows: TimelineRow[]; channels: { channel: string; n: number; booked: number }[] }> {
+  const base = `
+    WITH t AS (
+      SELECT l.id, l.name, l.created_at, COALESCE(s.source, 'quote_form') AS channel, l.service_requested, l.contact_pref, l.status,
+             ad.name AS ad_name, l.consent_given AS consent,
+             LEAST((SELECT min(c.started_at) FROM calls c WHERE c.lead_id = l.id),
+                   (SELECT min(m.sent_at) FROM messages m WHERE m.lead_id = l.id AND m.direction = 'outbound')) AS reached_at,
+             ap.status AS appt_status, (ap.status IN ('scheduled','completed','pending_owner')) AS booked, ap.paid_amount_cad AS paid
+      FROM leads l
+      LEFT JOIN comments cm ON cm.id = l.comment_id
+      LEFT JOIN signals s ON s.id = COALESCE(cm.signal_id, l.signal_id)
+      LEFT JOIN ads ad ON ad.id = l.ad_id
+      LEFT JOIN LATERAL (SELECT status, paid_amount_cad FROM appointments a WHERE a.lead_id = l.id ORDER BY a.created_at DESC LIMIT 1) ap ON true
+      WHERE l.created_at >= now() - make_interval(days => $1))`;
+  const where = `
+    WHERE ($2::text IS NULL OR channel = $2)
+      AND ($3::text IS NULL OR ($3 = 'paid' AND paid IS NOT NULL) OR ($3 = 'booked' AND COALESCE(booked, false))
+           OR ($3 = 'waiting' AND NOT COALESCE(booked, false) AND status NOT IN ('lost','handoff')) OR ($3 = 'lost' AND status = 'lost')
+           OR ($3 = 'you' AND status = 'handoff'))
+      AND ($4::text IS NULL OR name ILIKE '%' || $4 || '%')`;
+  const params = [f.days, f.channel, f.stage, f.q];
+  const [rows, channels] = await Promise.all([
+    q<TimelineRow>(`${base} SELECT * FROM t ${where} ORDER BY created_at DESC LIMIT 200`, params),
+    q<{ channel: string; n: number; booked: number }>(`${base} SELECT channel, count(*)::int AS n, count(*) FILTER (WHERE booked)::int AS booked
+      FROM t GROUP BY channel ORDER BY n DESC`, [f.days]),
+  ]);
+  return { rows, channels };
 }

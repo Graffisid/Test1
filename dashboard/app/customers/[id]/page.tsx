@@ -19,7 +19,13 @@ export default async function CustomerAuditPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const a = await getCustomerAudit(id);
   if (!a) notFound();
-  const { lead, source, quote, appointment, events } = a;
+  const { lead, source, quote, appointment, events, journey } = a;
+  const reached = journey.filter((j) => j.at);
+  const gap = (from: string | null, to: string | null) => {
+    if (!from || !to) return null;
+    const s = Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 1000);
+    return s < 90 ? `${Math.round(s)}s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${Math.round(s / 3600)} h` : `${Math.round(s / 86400)} days`;
+  };
   const service = SERVICE_LABEL[lead.service_requested] ?? lead.service_requested;
   // How long from the customer's first move (comment or form) to the last step.
   const first = events.find((e) => e.tone === "customer")?.at, last = events.at(-1)?.at;
@@ -34,6 +40,24 @@ export default async function CustomerAuditPage({ params }: { params: Promise<{ 
         <p className="hero-line">{service} · {lead.contact_pref === "text" ? "booked by text" : "reached by phone"}
           {appointment ? <> · visit <strong>{full(appointment.scheduled_for)}</strong> ({appointment.status === "scheduled" ? "confirmed" : appointment.status.replace("_", " ")})</> : null}</p>
       </header>
+
+      <section className="journey-card" aria-label="Journey">
+        <ol className="plain journey">
+          {journey.map((j, i) => {
+            const prev = journey.slice(0, i).reverse().find((x) => x.at)?.at ?? null;
+            return (
+              <li key={j.key} className={j.at ? "done" : "todo"}>
+                <span className="j-dot" aria-hidden="true">{j.at ? "✓" : i + 1}</span>
+                <strong>{j.label}</strong>
+                <span className="small muted">{j.at ? full(j.at) : "not yet"}</span>
+                {j.at && i > 0 && gap(prev, j.at) && <span className="j-gap">+{gap(prev, j.at)}</span>}
+              </li>
+            );
+          })}
+        </ol>
+        <p className="small muted">{reached.length} of {journey.length} steps reached
+          {appointment?.paid_amount_cad ? <> · <strong>{money(Number(appointment.paid_amount_cad))}</strong> collected</> : null}</p>
+      </section>
 
       <div className="audit-facts">
         <section>

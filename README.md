@@ -305,7 +305,9 @@ follows reach → enquiries → callbacks → bookings → paid, and shows money
 1, 3, 6 or 12 months, plus a 4-week projection. Fonts (Hanken Grotesk, Sora; SIL OFL) are bundled in
 `dashboard/app/fonts`. **Needs your OK** shows each post or ad as it will look on Instagram, Facebook, TikTok, LinkedIn
 or WhatsApp (an SVG poster built from the checked text), with Approve & schedule, Decline with a note, Edit text, and
-Send to my WhatsApp. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
+Send to my WhatsApp. **Your team** shows six roles (social media, calls, texts, assistant, bookings, manager), each built
+from real rows: last 7 days vs the week before, a 12-week graph, a live feed, an auto-written weekly report and the
+rules it can't break (`dashboard/lib/team.ts`). The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
 
 ```bash
 # once: least-privilege DB login for the dashboard (never the superuser)

@@ -14,6 +14,7 @@
 import { randomUUID } from "node:crypto";
 import type pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
+import { seedHistory } from "./seed-history.ts";
 import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 import { classifyVariant, type VariantCycleStats } from "../src/lib/classify.ts";
 import { MOCK_COMPETITORS, MockAdLibrarySource } from "../src/lib/ad-library.ts";
@@ -995,6 +996,7 @@ export async function seed(url = databaseUrl()): Promise<Record<string, number>>
     await client.query("BEGIN");
     await client.query(`TRUNCATE ${[...INSERT_ORDER].reverse().join(", ")} RESTART IDENTITY CASCADE`);
     await insertAll(client);
+    await seedHistory(client); // days 31–365: seasonal totals for the long-range dashboard views
     // Competitor ads come from the same poller that runs in production, fed by the mock source.
     const polledAt = new Date(Math.min(torontoAt(0, 2, 0).getTime(), NOW - 5 * MIN));
     await pollCompetitors(client, new MockAdLibrarySource(new Date(NOW)), polledAt);

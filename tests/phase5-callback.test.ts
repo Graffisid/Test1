@@ -215,6 +215,16 @@ describe("CASL: consent, opt-out, do-not-contact", () => {
       /CASL/);
   });
 
+  test("an old or imported lead is never cold-called, even if its new-lead alert fires", async () => {
+    const { rows: [lead] } = await admin.query<{ id: string }>(
+      `INSERT INTO leads (name, phone, phone_e164, service_requested, consent_given, consent_at, consent_text, consent_source,
+         status, idempotency_key, created_at)
+       VALUES ('Old Lead', '(289) 555-0177', '+12895550177', 'drain_cleaning', true, now() - interval '90 days', 'test wording',
+         'capture_form_checkbox', 'new', 'lead.created:test:old-lead', now() - interval '90 days') RETURNING id`);
+    assert.equal((await dispatchLead(pools.voice_app, lead.id, deps)).status, "skipped");
+    assert.equal((await admin.query(`SELECT count(*)::int AS n FROM calls WHERE lead_id = $1`, [lead.id])).rows[0].n, 0);
+  });
+
   test("a suppressed number is never called, even on a fresh form", async () => {
     await postForm(`${endpoint}${link()}`, { name: "Opt Out Again", phone: "905-555-0160", service: "drain_cleaning", consent: "yes" });
     const lead = await waitFor(async () => (await admin.query(

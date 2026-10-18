@@ -464,3 +464,60 @@ export async function getStudio(): Promise<StudioData> {
     whatsapp: { on: wa[0]?.on ?? false, number: ch[0] ? `••••${ch[0].address_e164.slice(-4)}` : null, owner: ch[0]?.owner_name ?? null },
   };
 }
+
+// ------------------------------------------------------------- overview ----
+
+export type MetricKey = "spend" | "reach" | "enquiries" | "callbacks" | "booked" | "revenue";
+export interface DayPoint { day: string; spend: number; reach: number; enquiries: number; callbacks: number; booked: number; paid: number; revenue: number }
+export interface PeriodTotals { days: number; revenue: number; spend: number; paid: number; prevRevenue: number; prevSpend: number }
+export interface Overview {
+  /** The last 14 complete days, oldest first: [0..6] = the week before, [7..13] = last 7 days. */
+  days: DayPoint[];
+  /** Weekly revenue, the last 12 complete weeks (Mon–Sun), oldest first. */
+  weeks: { week: string; revenue: number; spend: number; booked: number }[];
+  periods: PeriodTotals[];
+  monthToDate: { revenue: number; dayOfMonth: number; daysInMonth: number; lastMonth: number };
+  speed: { within60: number; calls: number; prevWithin60: number; prevCalls: number };
+}
+
+export async function getOverview(): Promise<Overview> {
+  const [days, weeks, periods, [mtd], [speed]] = await Promise.all([
+    q<DayPoint>(`
+      SELECT to_char(day, 'YYYY-MM-DD') AS day, spend_cad AS spend, impressions AS reach, leads AS enquiries, calls AS callbacks,
+             booked, paid_jobs AS paid, revenue_cad AS revenue
+      FROM v_daily_kpis WHERE day BETWEEN ${TODAY} - 14 AND ${TODAY} - 1 ORDER BY day`),
+    q<Overview["weeks"][number]>(`
+      SELECT to_char(date_trunc('week', day), 'YYYY-MM-DD') AS week, sum(revenue_cad) AS revenue, sum(spend_cad) AS spend, sum(booked)::int AS booked
+      FROM v_daily_kpis
+      WHERE day >= date_trunc('week', ${TODAY})::date - 84 AND day < date_trunc('week', ${TODAY})::date
+      GROUP BY 1 ORDER BY 1`),
+    q<PeriodTotals>(`
+      SELECT p.days,
+             COALESCE(sum(k.revenue_cad) FILTER (WHERE k.day >= ${TODAY} - p.days), 0) AS revenue,
+             COALESCE(sum(k.spend_cad)   FILTER (WHERE k.day >= ${TODAY} - p.days), 0) AS spend,
+             COALESCE(sum(k.paid_jobs)   FILTER (WHERE k.day >= ${TODAY} - p.days), 0)::int AS paid,
+             COALESCE(sum(k.revenue_cad) FILTER (WHERE k.day <  ${TODAY} - p.days), 0) AS "prevRevenue",
+             COALESCE(sum(k.spend_cad)   FILTER (WHERE k.day <  ${TODAY} - p.days), 0) AS "prevSpend"
+      FROM unnest(ARRAY[15, 30, 90, 180, 365]) AS p(days)
+      JOIN v_daily_kpis k ON k.day >= ${TODAY} - 2 * p.days AND k.day < ${TODAY}
+      GROUP BY p.days ORDER BY p.days`),
+    q<Overview["monthToDate"]>(`
+      SELECT COALESCE(sum(revenue_cad) FILTER (WHERE day >= date_trunc('month', ${TODAY})), 0) AS revenue,
+             extract(day FROM ${TODAY})::int AS "dayOfMonth",
+             extract(day FROM date_trunc('month', ${TODAY}) + interval '1 month - 1 day')::int AS "daysInMonth",
+             COALESCE(sum(revenue_cad) FILTER (WHERE day < date_trunc('month', ${TODAY})), 0) AS "lastMonth"
+      FROM v_daily_kpis WHERE day >= date_trunc('month', ${TODAY}) - interval '1 month'`),
+    q<Overview["speed"]>(`
+      SELECT COALESCE(sum(calls_within_60s) FILTER (WHERE day >= ${TODAY} - 7), 0)::int AS "within60",
+             COALESCE(sum(calls) FILTER (WHERE day >= ${TODAY} - 7), 0)::int AS calls,
+             COALESCE(sum(calls_within_60s) FILTER (WHERE day < ${TODAY} - 7), 0)::int AS "prevWithin60",
+             COALESCE(sum(calls) FILTER (WHERE day < ${TODAY} - 7), 0)::int AS "prevCalls"
+      FROM v_daily_kpis WHERE day BETWEEN ${TODAY} - 14 AND ${TODAY} - 1`),
+  ]);
+  return { days, weeks, periods, monthToDate: mtd, speed };
+}
+
+export async function getPendingCount(): Promise<number> {
+  const [r] = await q<{ n: number }>(`SELECT count(*)::int AS n FROM approvals WHERE status = 'pending' AND expires_at > now()`);
+  return r?.n ?? 0;
+}

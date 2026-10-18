@@ -1,140 +1,133 @@
-import { ActivityFeed } from "@/components/ActivityFeed";
-import { ApprovalCard, type ApprovalView } from "@/components/ApprovalCard";
-import { Flow } from "@/components/Flow";
+import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { Sparkline } from "@/components/Sparkline";
-import { Ring, StatTile, type Trend } from "@/components/StatTile";
+import { Funnel } from "@/components/charts/Funnel";
+import { Horseshoe } from "@/components/charts/Horseshoe";
+import { OverviewBoard, type KpiDef } from "@/components/charts/OverviewBoard";
+import { TrendProjection } from "@/components/charts/TrendProjection";
+import { fmt } from "@/components/charts/fmt";
 import { OWNER_NAME } from "@/lib/db";
 import { requireOwnerPage } from "@/lib/session";
-import { AGENT_LABEL, KIND_COPY, TZ, dateTime, money, relative, seconds } from "@/lib/format";
-import {
-  expireStaleApprovals, getActivity, getKpis, getPendingApprovals, getRecentDecisions, type ApprovalRow,
-} from "@/lib/queries";
+import { AGENT_LABEL, TZ, relative } from "@/lib/format";
+import { expireStaleApprovals, getActivity, getOverview, getPendingApprovals } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-function trend(cur: number | null, prev: number | null, fmt: (n: number) => string, lowerIsBetter: boolean): Trend | null {
-  if (cur === null || prev === null) return null;
-  const d = cur - prev;
-  const direction = Math.abs(d) < 1e-9 ? "flat" : d > 0 ? "up" : "down";
-  const good = direction === "flat" ? null : (direction === "down") === lowerIsBetter;
-  return { text: fmt(Math.abs(d)), direction, good };
-}
-
-function toView(a: ApprovalRow, now: number): ApprovalView {
-  const copy = KIND_COPY[a.kind] ?? { label: a.kind, ifApproved: "It goes ahead." };
-  return {
-    id: a.id, kind: a.kind, kindLabel: copy.label, ifApproved: copy.ifApproved, title: a.title, summary: a.summary,
-    payload: a.payload, original_payload: a.original_payload, requestedBy: AGENT_LABEL[a.requested_by_agent] ?? a.requested_by_agent,
-    status: a.status, edited: a.edited, needs_fact_check: !!a.needs_fact_check, createdLabel: relative(a.created_at, now),
-    expiresLabel: relative(a.expires_at, now), decidedLabel: a.decided_at ? dateTime(a.decided_at) : null,
-    decided_by: a.decided_by, decision_note: a.decision_note, leadId: a.lead_id,
-  };
-}
-
-export default async function Today() {
+export default async function Overview() {
   await requireOwnerPage();
   await expireStaleApprovals();
-  const [kpis, pending, decided, activity] = await Promise.all([
-    getKpis(), getPendingApprovals(), getRecentDecisions(6), getActivity({ limit: 50 }),
-  ]);
+  const [o, pending, activity] = await Promise.all([getOverview(), getPendingApprovals(), getActivity({ limit: 6 })]);
   const now = Date.now();
-  const { current: cur, prior, series, funnel } = kpis;
   const hour = Number(new Date(now).toLocaleString("en-CA", { timeZone: TZ, hour: "numeric", hour12: false }));
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const today = new Date(now).toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric" });
-  const n = pending.length;
+  const today = new Date(now).toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" });
+
+  const last = o.days.slice(0, 7), cur = o.days.slice(7);
+  const col = (rows: typeof cur, k: keyof (typeof cur)[number]) => rows.map((r) => Number(r[k]));
+  const tot = (rows: typeof cur, k: keyof (typeof cur)[number]) => col(rows, k).reduce((a, b) => a + b, 0);
+  const kpis: KpiDef[] = [
+    { key: "spend", label: "Ad spend", icon: "dollar", format: "money", goodWhen: "neither", thisWeek: col(cur, "spend"), lastWeek: col(last, "spend"),
+      help: "What your ads cost on Facebook and Instagram. Capped at $500 a week by the database." },
+    { key: "reach", label: "People reached", icon: "megaphone", format: "int", goodWhen: "up", thisWeek: col(cur, "reach"), lastWeek: col(last, "reach"),
+      help: "How many times your ads and posts were shown." },
+    { key: "enquiries", label: "Enquiries", icon: "inbox", format: "int", goodWhen: "up", thisWeek: col(cur, "enquiries"), lastWeek: col(last, "enquiries"),
+      help: "People who reached out: comments, messages and quote forms that became leads." },
+    { key: "callbacks", label: "Callbacks", icon: "phone", format: "int", goodWhen: "up", thisWeek: col(cur, "callbacks"), lastWeek: col(last, "callbacks"),
+      help: "Leads your phone assistant called back. The goal is within 60 seconds." },
+    { key: "booked", label: "Jobs booked", icon: "calendar", format: "int", goodWhen: "up", thisWeek: col(cur, "booked"), lastWeek: col(last, "booked"),
+      help: "Appointments put on your calendar." },
+    { key: "revenue", label: "Collected", icon: "chart", format: "money", goodWhen: "up", thisWeek: col(cur, "revenue"), lastWeek: col(last, "revenue"),
+      help: "Payments for finished jobs. Lags bookings by a few days." },
+  ];
+  const spend = tot(cur, "spend"), leads = tot(cur, "enquiries"), revenue = tot(cur, "revenue");
+  const mtd = o.monthToDate;
+  const monthPace = mtd.dayOfMonth > 1 ? (Number(mtd.revenue) / (mtd.dayOfMonth - 1)) * mtd.daysInMonth : null;
+  const speedPct = o.speed.calls ? o.speed.within60 / o.speed.calls : null;
 
   return (
     <>
-      <section className="hero rise">
-        <p className="eyebrow">{today}</p>
-        <h1>{greeting}, {OWNER_NAME.split(" ")[0]}.</h1>
-        <p className="hero-line">
-          In the last 7 days your team turned <strong>{money(cur.spend, { cents: false })}</strong> of ads into{" "}
-          <strong>{cur.paidLeads} leads</strong> and <strong>{cur.booked} booked jobs</strong>.
-        </p>
-        {n > 0 ? (
-          <a className="hero-cta" href="#approvals">
-            <span className="hero-badge">{n}</span>
-            {n === 1 ? "thing needs" : "things need"} your OK
-            <Icon name="arrowDown" />
-          </a>
-        ) : (
-          <p className="hero-cta done"><Icon name="check" /> You&apos;re all caught up</p>
-        )}
-      </section>
+      <header className="page-head rise">
+        <div>
+          <p className="eyebrow">{today}</p>
+          <h1>{greeting}, {OWNER_NAME.split(" ")[0]}</h1>
+          <p className="page-sub">
+            Last 7 days: <strong>{fmt("money", spend)}</strong> of ads brought <strong>{leads} enquiries</strong> and{" "}
+            <strong>{fmt("money", revenue)}</strong> collected{speedPct !== null ? <> · <strong>{fmt("pct", speedPct)}</strong> called back within a minute</> : null}.
+          </p>
+        </div>
+        <Link href="/approvals" className={`attention ${pending.length ? "" : "clear"}`}>
+          {pending.length ? <><span className="attention-n">{pending.length}</span> need your OK <Icon name="arrowRight" /></>
+            : <><Icon name="check" /> All caught up</>}
+        </Link>
+      </header>
 
-      <Flow f={funnel} />
+      <OverviewBoard kpis={kpis} thisDays={cur.map((d) => d.day)} lastDays={last.map((d) => d.day)} />
 
-      <h2 className="band-title rise">This week vs last week</h2>
-      <div className="tiles">
-        <StatTile
-          label="Callback speed"
-          value={cur.speed.median_s}
-          format="seconds"
-          caption={<>{cur.speed.within_60} of {cur.speed.calls} people called within a minute</>}
-          trend={trend(cur.speed.median_s, prior.speed.median_s, seconds, true)}
-          help="How long a new lead waits for your phone assistant to call. The goal is under 60 seconds."
-        >
-          <Ring value={cur.speed.median_s} target={60} label={`Typical wait ${seconds(cur.speed.median_s)} of a 60 second goal`} />
-        </StatTile>
-        <StatTile
-          label="Cost per lead"
-          value={cur.cpl}
-          format="money"
-          caption={<>{money(cur.spend, { cents: false })} spent for {cur.paidLeads} leads</>}
-          trend={trend(cur.cpl, prior.cpl, (v) => money(v), true)}
-          help="Ad spend divided by the people who reached out because of an ad. Lower is better."
-        >
-          <Sparkline label="Cost per lead" format={(v) => money(v)}
-            points={series.map((p) => ({ day: p.day, value: p.cost_per_lead_cad }))} />
-        </StatTile>
-        <StatTile
-          label="Jobs booked"
-          value={cur.booked}
-          format="int"
-          caption={<>appointments on your calendar</>}
-          trend={trend(cur.booked, prior.booked, (v) => String(Math.round(v)), false)}
-          help="Appointments your phone assistant booked in the last 7 days."
-        >
-          <Sparkline label="Jobs booked per day" format={(v) => `${v} booked`}
-            points={series.map((p) => ({ day: p.day, value: p.booked }))} />
-        </StatTile>
-        <StatTile
-          label="Money collected"
-          value={cur.revenue}
-          format="moneyWhole"
-          caption={<>from {cur.paid} paid job{cur.paid === 1 ? "" : "s"}</>}
-          trend={trend(cur.revenue, prior.revenue, (v) => money(v, { cents: false }), false)}
-          help="Payments for finished jobs. It lags bookings by a few days, because jobs get done first."
-        >
-          <Sparkline label="Money collected per day" format={(v) => money(v, { cents: false })}
-            points={series.map((p) => ({ day: p.day, value: p.revenue_cad }))} />
-        </StatTile>
+      <div className="grid-2">
+        <section className="card rise" aria-labelledby="money-title">
+          <header className="card-head">
+            <div>
+              <p className="eyebrow">Money</p>
+              <h2 id="money-title">What you collected</h2>
+            </div>
+          </header>
+          <Horseshoe periods={o.periods.map((p) => ({ ...p, revenue: Number(p.revenue), spend: Number(p.spend), prevRevenue: Number(p.prevRevenue), prevSpend: Number(p.prevSpend) }))} />
+        </section>
+        <section className="card rise" aria-labelledby="funnel-title">
+          <header className="card-head">
+            <div>
+              <p className="eyebrow">Last 7 days vs the week before</p>
+              <h2 id="funnel-title">From reach to paid job</h2>
+            </div>
+            <ul className="legend plain" aria-label="Legend"><li><i className="sw s1" /> Last 7 days</li><li><i className="sw s2" /> Week before</li></ul>
+          </header>
+          <Funnel stages={[
+            { label: "People reached", cur: tot(cur, "reach"), prev: tot(last, "reach"), note: "ad and post views" },
+            { label: "Enquiries", cur: leads, prev: tot(last, "enquiries"), note: "comments, messages, forms" },
+            { label: "Called back", cur: tot(cur, "callbacks"), prev: tot(last, "callbacks"), note: "by your phone assistant" },
+            { label: "Jobs booked", cur: tot(cur, "booked"), prev: tot(last, "booked"), note: "on your calendar" },
+            { label: "Paid", cur: tot(cur, "paid"), prev: tot(last, "paid"), note: "jobs done and paid" },
+          ]} />
+        </section>
       </div>
 
-      <div className="columns">
-        <section id="approvals" aria-labelledby="queue-title" className="queue">
-          <header className="section-head rise">
-            <h2 id="queue-title">Needs your OK <span className="count">{n}</span></h2>
-            <span className="muted small">Nothing goes out or spends money until you approve it.</span>
+      <section className="card chart-card rise" aria-labelledby="trend-title">
+        <header className="card-head">
+          <div>
+            <p className="eyebrow">Last 12 weeks + next 4 projected</p>
+            <h2 id="trend-title">Money collected per week</h2>
+          </div>
+          <div className="head-stats">
+            <div><span className="muted small">This month so far</span><strong className="num">{fmt("money", Number(mtd.revenue))}</strong></div>
+            {monthPace !== null && <div><span className="muted small">On pace for</span><strong className="num">{fmt("money", monthPace)}</strong></div>}
+            <div><span className="muted small">Last month</span><strong className="num">{fmt("money", Number(mtd.lastMonth))}</strong></div>
+          </div>
+        </header>
+        <ul className="legend plain" aria-label="Legend"><li><i className="sw s1" /> Collected</li><li><i className="sw proj" /> Projected</li></ul>
+        <TrendProjection weeks={o.weeks.map((w) => ({ week: w.week, revenue: Number(w.revenue) }))} />
+      </section>
+
+      <div className="grid-2">
+        <section className="card rise" aria-labelledby="att-title">
+          <header className="card-head">
+            <h2 id="att-title">Needs your attention</h2>
+            <Link href="/approvals" className="btn small">Open all <span className="count">{pending.length}</span></Link>
           </header>
-          {n === 0 && (
-            <div className="empty-state rise">
-              <Icon name="check" />
-              <p>All caught up. New drafts from your team will show up here.</p>
-            </div>
-          )}
-          {pending.map((a) => <ApprovalCard key={a.id} a={toView(a, now)} />)}
-          {decided.length > 0 && (
-            <details className="decided">
-              <summary>Recently decided ({decided.length})</summary>
-              {decided.map((a) => <ApprovalCard key={a.id} a={toView(a, now)} />)}
-            </details>
+          {pending.length === 0 ? <p className="muted">Nothing waiting. New drafts and bookings will appear here.</p> : (
+            <ul className="plain mini-list">
+              {pending.slice(0, 4).map((a) => (
+                <li key={a.id}><Link href="/approvals"><strong>{a.title}</strong><span className="muted small">from {AGENT_LABEL[a.requested_by_agent] ?? a.requested_by_agent} · {relative(a.created_at, now)}</span></Link></li>
+              ))}
+            </ul>
           )}
         </section>
-        <ActivityFeed initial={JSON.parse(JSON.stringify(activity))} renderedAt={now} />
+        <section className="card rise" aria-labelledby="act-title">
+          <header className="card-head"><h2 id="act-title">Your team, just now</h2></header>
+          <ul className="plain mini-list">
+            {activity.map((a) => (
+              <li key={a.id}><div><strong>{AGENT_LABEL[a.agent] ?? a.agent}</strong><span className="small">{a.decision}</span><span className="muted small">{relative(a.occurred_at, now)}</span></div></li>
+            ))}
+          </ul>
+        </section>
       </div>
     </>
   );

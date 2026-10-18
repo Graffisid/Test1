@@ -56,6 +56,8 @@ export async function dispatchLead(pool: pg.Pool, leadId: string, deps: Dispatch
         FROM leads WHERE id = $1 FOR UPDATE`, [leadId]);
     // Leads who asked to be texted belong to the texting side (workflows/text-agent.ts).
     if (!lead || lead.contact_pref !== "call") { await db.query("ROLLBACK"); return { leadId, status: "skipped" }; }
+    // A "callback within 60 seconds" is only for fresh leads: imported or historical leads are never cold-called.
+    if (Date.now() - lead.created_at.getTime() > 48 * 3600_000) { await db.query("ROLLBACK"); return { leadId, status: "skipped" }; }
     if (!lead.consent_given || lead.consent_withdrawn_at || !lead.phone_e164) {
       await log(db, { action: "skip_call", status: "blocked", leadId, key: `log:nocall:${leadId}`,
         decision: "CASL: no valid consent (or no usable number) — no callback; owner follow-up" });

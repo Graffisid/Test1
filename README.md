@@ -298,6 +298,13 @@ stranger's number" shows that nobody else can approve. See SECURITY.md for every
 
 ## Dashboard
 
+The owner dashboard follows the ONCU Insights look: a sidebar, big clear numbers with "vs last week" badges, and
+hand-drawn SVG charts (no chart library) where every bar and point shows its numbers on hover, tap or keyboard
+focus. The Overview compares the last 7 days with the week before (click any number card to chart it day by day),
+follows reach → enquiries → callbacks → bookings → paid, and shows money collected as a horseshoe for 15 days,
+1, 3, 6 or 12 months, plus a 4-week projection. Fonts (Hanken Grotesk, Sora; SIL OFL) are bundled in
+`dashboard/app/fonts`. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
+
 ```bash
 # once: least-privilege DB login for the dashboard (never the superuser)
 DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-login

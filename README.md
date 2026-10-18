@@ -303,7 +303,9 @@ hand-drawn SVG charts (no chart library) where every bar and point shows its num
 focus. The Overview compares the last 7 days with the week before (click any number card to chart it day by day),
 follows reach → enquiries → callbacks → bookings → paid, and shows money collected as a horseshoe for 15 days,
 1, 3, 6 or 12 months, plus a 4-week projection. Fonts (Hanken Grotesk, Sora; SIL OFL) are bundled in
-`dashboard/app/fonts`. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
+`dashboard/app/fonts`. **Needs your OK** shows each post or ad as it will look on Instagram, Facebook, TikTok, LinkedIn
+or WhatsApp (an SVG poster built from the checked text), with Approve & schedule, Decline with a note, Edit text, and
+Send to my WhatsApp. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
 
 ```bash
 # once: least-privilege DB login for the dashboard (never the superuser)

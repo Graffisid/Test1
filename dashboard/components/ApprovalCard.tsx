@@ -45,7 +45,7 @@ const EDITABLE: Record<string, string[]> = {
 const str = (v: unknown) => (typeof v === "string" ? v : null);
 
 /** Shows the item the way the public would see it: an ad as an ad, a reply as a reply. */
-function Preview({ kind, p, leadId }: { kind: string; p: Record<string, unknown>; leadId?: string | null }) {
+export function Preview({ kind, p, leadId }: { kind: string; p: Record<string, unknown>; leadId?: string | null }) {
   if (kind === "booking") {
     const src = (p.source ?? {}) as Record<string, unknown>;
     const at = (iso: unknown) => typeof iso === "string"

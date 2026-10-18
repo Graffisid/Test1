@@ -102,8 +102,8 @@ export async function notifyOwner(db: pg.ClientBase, sender: WhatsAppSender,
   opts: { dashboardUrl?: string } = {}): Promise<NotifyResult> {
   const dashboardUrl = opts.dashboardUrl ?? process.env.DASHBOARD_URL ?? "http://127.0.0.1:3000";
   if (!(await on(db))) return { sent: 0, acked: 0, skipped: "connection_off" };
-  const { rows: [ch] } = await db.query<{ id: string; address_e164: string }>(
-    `SELECT id, address_e164 FROM owner_channels WHERE channel = 'whatsapp' AND enabled ORDER BY created_at LIMIT 1`);
+  const { rows: [ch] } = await db.query<{ id: string; address_e164: string; auto_send: boolean }>(
+    `SELECT id, address_e164, auto_send FROM owner_channels WHERE channel = 'whatsapp' AND enabled ORDER BY created_at LIMIT 1`);
   if (!ch) return { sent: 0, acked: 0, skipped: "no_owner_number" };
 
   // 1. Requests.
@@ -111,8 +111,9 @@ export async function notifyOwner(db: pg.ClientBase, sender: WhatsAppSender,
     `SELECT a.id, a.kind, a.title, a.summary, a.payload, a.expires_at, v.needs_fact_check, v.headline, v.primary_text
      FROM approvals a LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
      WHERE a.status = 'pending' AND a.expires_at > now() + interval '5 minutes' AND a.kind = ANY($1)
+       AND ($2 OR a.wa_requested_at IS NOT NULL)   -- everything when auto-send is on, else only what the owner asked for
        AND NOT EXISTS (SELECT 1 FROM whatsapp_messages w WHERE w.idempotency_key = 'wa:approval:' || a.id::text)
-     ORDER BY a.created_at LIMIT 10`, [PHONE_KINDS]);
+     ORDER BY a.wa_requested_at DESC NULLS LAST, a.created_at LIMIT 10`, [PHONE_KINDS, ch.auto_send]);
   let sent = 0;
   for (const a of rows) {
     const code = newApprovalCode();

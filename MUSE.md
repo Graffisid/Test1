@@ -214,7 +214,8 @@ understand goes to the owner; it never improvises. Every text identifies the bus
 
 ## WhatsApp approvals
 
-- Requests go only to the owner's registered number. Reply `APPROVE <code>` or `REJECT <code>` (a reason
+- Requests go only to the owner's registered number, and only when the owner presses "Send to my WhatsApp"
+  (or switches on auto-send in their profile). Reply `APPROVE <code>` or `REJECT <code>` (a reason
   may follow). Each code works once, for one item, until the item expires.
 - Budget changes and ad launches are **never** approved by phone — dashboard only.
 - We never ask for a password or payment details on WhatsApp. Replies from other numbers are ignored.

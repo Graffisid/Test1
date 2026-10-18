@@ -521,3 +521,32 @@ export async function getPendingCount(): Promise<number> {
   const [r] = await q<{ n: number }>(`SELECT count(*)::int AS n FROM approvals WHERE status = 'pending' AND expires_at > now()`);
   return r?.n ?? 0;
 }
+
+// ---------------------------------------------------------- review station ----
+
+export interface ReviewRow extends ApprovalRow {
+  content_item_id: string | null;
+  content_kind: string | null;
+  content_platform: string | null;
+  checks: { name: string; ok: boolean; detail: string }[] | null;
+  score: { total: number } | null;
+  scheduled_for: string | null;
+  wa_sent_at: string | null;
+  wa_requested_at: string | null;
+}
+
+export async function getReviewItems(): Promise<{ pending: ReviewRow[]; whatsapp: { on: boolean; number: string | null; auto: boolean } }> {
+  const [pending, wa, ch] = await Promise.all([
+    q<ReviewRow>(`
+      SELECT ${APPROVAL_COLS}, a.content_item_id, c.kind AS content_kind, c.platform AS content_platform, c.checks, c.score, c.scheduled_for,
+             a.wa_requested_at,
+             (SELECT w.sent_at FROM whatsapp_messages w WHERE w.idempotency_key = 'wa:approval:' || a.id::text) AS wa_sent_at
+      FROM approvals a
+      LEFT JOIN ads ad ON ad.id = a.ad_id LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
+      LEFT JOIN content_items c ON c.id = a.content_item_id
+      WHERE a.status = 'pending' ORDER BY (a.kind = 'booking') DESC, a.created_at ASC`),
+    q<{ on: boolean }>(`SELECT integration_on('whatsapp') AS on`),
+    q<{ address_e164: string; auto_send: boolean }>(`SELECT address_e164, auto_send FROM owner_channels WHERE channel = 'whatsapp' AND enabled LIMIT 1`),
+  ]);
+  return { pending, whatsapp: { on: wa[0]?.on ?? false, number: ch[0] ? `••••${ch[0].address_e164.slice(-4)}` : null, auto: ch[0]?.auto_send ?? false } };
+}

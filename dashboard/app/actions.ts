@@ -33,7 +33,7 @@ const UUID = /^[0-9a-f-]{36}$/i;
 async function withPendingApproval<T>(
   id: string,
   fn: (client: import("pg").PoolClient, row: { kind: string; title: string; payload: Record<string, unknown>;
-    ad_variant_id: string | null; needs_fact_check: boolean | null }) => Promise<T>,
+    ad_variant_id: string | null; needs_fact_check: boolean | null; content_item_id: string | null }) => Promise<T>,
 ): Promise<T | ActionState> {
   try {
     await requireOwner();
@@ -45,7 +45,7 @@ async function withPendingApproval<T>(
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `SELECT a.kind, a.title, a.payload, a.status, a.expires_at < now() AS expired, a.ad_variant_id, v.needs_fact_check
+      `SELECT a.kind, a.title, a.payload, a.status, a.expires_at < now() AS expired, a.ad_variant_id, v.needs_fact_check, a.content_item_id
        FROM approvals a LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
        WHERE a.id = $1 FOR UPDATE OF a`, [id]);
     const row = rows[0];
@@ -74,6 +74,7 @@ async function withPendingApproval<T>(
   } finally {
     client.release();
     revalidatePath("/");
+    revalidatePath("/approvals");
     revalidatePath("/digest");
     revalidatePath("/customers", "layout");
   }
@@ -133,11 +134,33 @@ export async function approveAction(_prev: ActionState | null, form: FormData): 
     if (row.needs_fact_check && !factChecked) {
       return { ok: false, message: "This draft has an unverified claim. Confirm you've verified it (or edit it out) before approving." };
     }
+    // "Post at": a Toronto-time date and time from the review card. The database checks it is 15 min – 60 days ahead.
+    const postAt = String(form.get("scheduled_for") ?? "").trim();
+    let scheduledLabel: string | null = null;
+    if (postAt && row.content_item_id) {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(postAt)) return { ok: false, message: "That post time isn't a valid date and time." };
+      try {
+        await client.query("SAVEPOINT reschedule");
+        const { rows: [c] } = await client.query<{ at: string }>(
+          `UPDATE content_items SET scheduled_for = ($2::timestamp AT TIME ZONE 'America/Toronto') WHERE id = $1 RETURNING scheduled_for AS at`,
+          [row.content_item_id, postAt]);
+        await client.query(`UPDATE approvals SET payload = jsonb_set(payload, '{scheduled_for}', to_jsonb($2::text)) WHERE id = $1`,
+          [id, new Date(c.at).toISOString()]);
+        scheduledLabel = new Date(c.at).toLocaleString("en-CA", { timeZone: "America/Toronto", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+      } catch {
+        await client.query("ROLLBACK TO SAVEPOINT reschedule");
+        return { ok: false, message: "Pick a post time between 15 minutes and 60 days from now." };
+      }
+    }
     await client.query(
       `UPDATE approvals SET status = 'approved', decided_by = $2, decided_at = now(), decision_note = $3 WHERE id = $1`,
       [id, OWNER_NAME, note]);
     if (row.ad_variant_id) {
       await client.query(`UPDATE ad_variants SET status = 'approved', needs_fact_check = false WHERE id = $1`, [row.ad_variant_id]);
+    }
+    if (scheduledLabel) {
+      await log(client, "owner", "approve", `Approved and scheduled for ${scheduledLabel}: ${row.title}`, id, "ok", "publishing");
+      return { ok: true, message: `Approved. It will post ${scheduledLabel} (simulated in this build).` };
     }
     const dept = row.kind === "budget_reallocation" ? "paid_ads" : row.kind === "reputation_reply" ? "reputation"
       : row.kind === "booking" ? "sales_response" : "publishing";
@@ -234,4 +257,24 @@ export async function requestAgentAction(_prev: ActionState | null, form: FormDa
     client.release();
     revalidatePath("/studio");
   }
+}
+
+/** Ask for one approval to go to the owner's WhatsApp now. The notifier sends it, with its own one-time code. */
+export async function sendToWhatsAppAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
+  const id = String(form.get("id") ?? "");
+  return withPendingApproval(id, async (client, row) => {
+    if (row.kind === "budget_reallocation" || row.kind === "ad_launch") {
+      return { ok: false, message: "Money decisions are only made here in the dashboard, never by phone." };
+    }
+    const { rows: [ch] } = await client.query<{ on: boolean; has: boolean }>(
+      `SELECT integration_on('whatsapp') AS on, EXISTS (SELECT 1 FROM owner_channels WHERE channel = 'whatsapp' AND enabled) AS has`);
+    if (!ch.has) return { ok: false, message: "No WhatsApp number is set up yet. Add it in your profile." };
+    if (!ch.on) return { ok: false, message: "WhatsApp is switched off in Connections. Switch it on first." };
+    const { rows: [sent] } = await client.query<{ at: string }>(
+      `SELECT sent_at AS at FROM whatsapp_messages WHERE idempotency_key = 'wa:approval:' || $1::text`, [id]);
+    if (sent) return { ok: true, message: "It's already on your WhatsApp — reply APPROVE or REJECT with the code there." };
+    await client.query(`UPDATE approvals SET wa_requested_at = now() WHERE id = $1`, [id]);
+    await log(client, "owner", "request_whatsapp", `Asked for this on WhatsApp: ${row.title}`, id, "ok", "orchestration");
+    return { ok: true, message: "Sending to your WhatsApp now — it arrives in a few seconds (simulated)." };
+  }) as Promise<ActionState>;
 }

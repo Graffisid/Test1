@@ -4,6 +4,9 @@
  *                 webhook receiver as a SIGNED Meta webhook, exactly like a real comment would be.
  *   Messages tab: the customer's text thread with Northshore; replies go to the receiver as SIGNED Twilio
  *                 webhooks, exactly like a real text would.
+ *   /owner:       the OWNER's WhatsApp. Approval requests arrive here (POST /_deliver, loopback + shared secret);
+ *                 Approve / Reject go back as SIGNED Twilio WhatsApp webhooks, exactly like a real reply would.
+ *                 "Reply from a stranger's number" shows that nobody else can approve.
  * So the demo exercises the real pipeline end to end; only Facebook and the phone network are pretend.
  *
  * Refuses to start unless DEMO_MODE=1 and MOCK_MODE=mock. Binds 127.0.0.1 only. Reads through demo_app,
@@ -13,7 +16,7 @@
  *   npm run demo:phone      (the sandbox starts it for you on http://127.0.0.1:3002)
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import pg from "pg";
 import { signMetaBody } from "../api/meta-webhook.ts";
 import { twilioSignature } from "../api/sms-webhook.ts";
@@ -25,7 +28,11 @@ interface DemoOptions {
   metaAppSecret: string;
   twilioAuthToken: string;
   pageId?: string;
+  deliverSecret?: string;        // shared with the agent loop, for /_deliver
+  ownerNumber?: string;          // the owner's (fictional) WhatsApp number
 }
+
+interface WaMsg { from: "business" | "owner" | "stranger"; body: string; at: Date }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 const linkify = (s: string) => esc(s).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noreferrer">Get a quote →</a>`);
@@ -63,6 +70,12 @@ button{font:inherit;font-weight:600;border:0;border-radius:18px;padding:9px 14px
 .ts{font-size:11px;color:#8e8e93;align-self:center;margin-top:4px}
 .quick{display:flex;gap:6px;flex-wrap:wrap;padding:8px 12px 0;background:#fff}.quick button{background:#e9e9eb;color:#111;padding:6px 14px}
 form.sf{display:flex;gap:8px;padding:10px 12px 16px;background:#fff;border-top:1px solid #eee}
+.wa .tabs a.on{color:#008069;border-color:#008069}.wa .screen{background:#efeae2}.wa .who{background:#008069;color:#fff}.wa .who .sp{color:#d1f4cc}
+.wmsg{max-width:86%;padding:8px 11px;border-radius:10px;white-space:pre-wrap;font-size:14px;box-shadow:0 1px 1px rgba(0,0,0,.08)}
+.wb{align-self:flex-start;background:#fff}.wo{align-self:flex-end;background:#d9fdd3}.ws{align-self:flex-end;background:#fde2e2}
+.wa .thread{background:#efeae2}.acts{display:flex;gap:6px;margin-top:8px}.acts button{flex:1;padding:7px 10px;border-radius:8px}
+.ok{background:#008069}.no{background:#e9e9eb;color:#b42318}.wa form.sf button{background:#008069}.strange{padding:8px 12px;background:#fff;font-size:12px;color:#65676b}
+.strange button{background:#e9e9eb;color:#111;padding:4px 10px;font-size:12px}
 .empty{padding:40px 24px;text-align:center;color:#65676b}.pick{padding:10px 12px;background:#fff;font-size:13px}.pick a{color:#1877f2}`;
 
 function page(res: ServerResponse, body: string, refresh = 0) {
@@ -173,7 +186,8 @@ export function createDemoServer(o: DemoOptions) {
   function phone(tab: "facebook" | "messages", inner: string, unread: number) {
     return `<div class="phone"><div class="status"><span>9:41</span><span>●●● 5G</span></div>
       <nav class="tabs"><a href="/?tab=facebook" class="${tab === "facebook" ? "on" : ""}">Facebook</a>
-      <a href="/?tab=messages" class="${tab === "messages" ? "on" : ""}">Messages${unread ? `<span class="badge">${unread}</span>` : ""}</a></nav>
+      <a href="/?tab=messages" class="${tab === "messages" ? "on" : ""}">Messages${unread ? `<span class="badge">${unread}</span>` : ""}</a>
+      <a href="/owner">Owner WhatsApp</a></nav>
       <main class="screen">${inner}</main></div>`;
   }
 
@@ -203,14 +217,86 @@ export function createDemoServer(o: DemoOptions) {
     return lead.id;
   }
 
+  // The owner's WhatsApp thread lives in memory: it is a pretend phone (restarting it clears the screen).
+  const wa: WaMsg[] = [];
+  const owner = o.ownerNumber ?? "+19055550111";
+
+  function ownerPhone(res: ServerResponse) {
+    const last = wa.at(-1);
+    const bubbles = wa.slice(-40).map((m) => {
+      const code = m.from === "business" ? /APPROVE ([A-HJ-NP-Z2-9]{6})/.exec(m.body)?.[1] ?? /REJECT ([A-HJ-NP-Z2-9]{6})/.exec(m.body)?.[1] : undefined;
+      const canApprove = m.from === "business" && /APPROVE [A-HJ-NP-Z2-9]{6}/.test(m.body);
+      return `<div class="wmsg ${m.from === "business" ? "wb" : m.from === "owner" ? "wo" : "ws"}">${m.from === "stranger" ? "<b>From a stranger's number:</b>\n" : ""}${esc(m.body).replace(/\*([^*\n]+)\*/g, "<b>$1</b>")}
+        ${code ? `<form method="post" action="/wa" class="acts">${canApprove ? `<button class="ok" name="body" value="APPROVE ${code}">Approve</button>` : ""}
+          <button class="no" name="body" value="REJECT ${code}">Reject</button></form>` : ""}</div>`;
+    }).join("");
+    const body = `<div class="who"><b>Northshore AI team</b><span class="sp">WhatsApp · only your replies count</span></div>
+      <div class="thread">${bubbles || `<p class="empty">Nothing to approve yet.<br>In the dashboard, open Content studio and press
+        “Analyse the market”, then “Create posts”. The best drafts arrive here.</p>`}</div>
+      <form class="sf" method="post" action="/wa"><input name="body" maxlength="300" placeholder="Message" aria-label="Message" required><button type="submit">Send</button></form>
+      <form class="strange" method="post" action="/wa"><input type="hidden" name="stranger" value="1">
+        Security test: <button name="body" value="${esc(lastCode() ? `APPROVE ${lastCode()}` : "APPROVE ABCDEF")}">Reply APPROVE from a stranger's number</button></form>`;
+    page(res, `<div class="phone wa"><div class="status"><span>9:41</span><span>●●● 5G</span></div>
+      <nav class="tabs"><a href="/?tab=facebook">Facebook</a><a href="/?tab=messages">Messages</a><a href="/owner" class="on">Owner WhatsApp</a></nav>
+      <main class="screen">${body}</main></div>`, !last || last.from !== "business" ? 3 : 0);
+  }
+  function lastCode() {
+    for (let i = wa.length - 1; i >= 0; i--) {
+      const c = wa[i].from === "business" ? /APPROVE ([A-HJ-NP-Z2-9]{6})/.exec(wa[i].body)?.[1] : undefined;
+      if (c) return c;
+    }
+    return null;
+  }
+
+  async function sendWhatsApp(form: URLSearchParams) {
+    const text = (form.get("body") ?? "").trim().slice(0, 300);
+    if (!text) return;
+    const stranger = form.get("stranger") === "1";
+    wa.push({ from: stranger ? "stranger" : "owner", body: text, at: new Date() });
+    const params = new URLSearchParams({ From: `whatsapp:${stranger ? "+19055550999" : owner}`, To: "whatsapp:+19055550100", Body: text,
+      MessageSid: `SMdemo${randomUUID().replace(/-/g, "").slice(0, 26)}`, NumMedia: "0" });
+    const url = `${o.publicBase.replace(/\/$/, "")}/webhooks/whatsapp`;
+    await fetch(`${o.ingestBase}/webhooks/whatsapp`, { method: "POST", body: params,
+      headers: { "content-type": "application/x-www-form-urlencoded", "x-twilio-signature": twilioSignature(url, params, o.twilioAuthToken) } });
+  }
+
+  /** The agent loop "delivers" WhatsApp messages here. Loopback only, shared secret, small JSON only. */
+  async function deliver(req: IncomingMessage, res: ServerResponse) {
+    const remote = req.socket.remoteAddress ?? "";
+    const given = Buffer.from(String(req.headers["x-demo-secret"] ?? ""));
+    const want = Buffer.from(o.deliverSecret ?? "");
+    if (!o.deliverSecret || !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)
+        || given.length !== want.length || !timingSafeEqual(given, want)) {
+      res.writeHead(403).end("forbidden");
+      return;
+    }
+    const raw = await new Promise<string | null>((resolve) => {
+      let size = 0; const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => { size += c.length; if (size <= 8192) chunks.push(c); });
+      req.on("end", () => resolve(size > 8192 ? null : Buffer.concat(chunks).toString("utf8")));
+      req.on("error", () => resolve(null));
+    });
+    let msg: { to?: unknown; body?: unknown } = {};
+    try { msg = raw ? JSON.parse(raw) : {}; } catch { /* refused below */ }
+    if (msg.to !== owner || typeof msg.body !== "string" || !msg.body || msg.body.length > 4096) {
+      res.writeHead(400).end("bad request");
+      return;
+    }
+    wa.push({ from: "business", body: msg.body, at: new Date() });
+    if (wa.length > 200) wa.splice(0, wa.length - 200);
+    res.writeHead(204).end();
+  }
+
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
+      if (req.method === "POST" && url.pathname === "/_deliver") return await deliver(req, res);
+      if (req.method === "GET" && url.pathname === "/owner") return ownerPhone(res);
       if (req.method === "GET" && url.pathname === "/") {
         return url.searchParams.get("tab") === "messages" ? await messages(res, url.searchParams.get("lead"))
           : await facebook(res, Number(url.searchParams.get("post")) || 0);
       }
-      if (req.method === "POST" && (url.pathname === "/comment" || url.pathname === "/sms")) {
+      if (req.method === "POST" && (url.pathname === "/comment" || url.pathname === "/sms" || url.pathname === "/wa")) {
         // Forms only come from this page (CSRF). With no-referrer pages, browsers send "Origin: null", so trust
         // Sec-Fetch-Site first and only fall back to a real Origin value.
         const site = req.headers["sec-fetch-site"];
@@ -223,7 +309,8 @@ export function createDemoServer(o: DemoOptions) {
         const form = await readForm(req);
         if (!form) { res.writeHead(413).end("too large"); return; }
         let to = `/?tab=facebook&post=${Number(form.get("post")) || 0}`;
-        if (url.pathname === "/comment") await postComment(form);
+        if (url.pathname === "/wa") { await sendWhatsApp(form); to = "/owner"; }
+        else if (url.pathname === "/comment") await postComment(form);
         else to = `/?tab=messages&lead=${encodeURIComponent((await sendSms(form)) ?? "")}`;
         res.writeHead(303, { location: to }).end();
         return;
@@ -247,6 +334,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     pool, ingestBase: process.env.INGEST_URL?.replace(/\/webhooks\/meta$/, "") || "http://127.0.0.1:3001",
     publicBase: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3001", metaAppSecret: need("META_APP_SECRET"),
     twilioAuthToken: need("TWILIO_AUTH_TOKEN"), pageId: process.env.META_PAGE_ID,
+    deliverSecret: process.env.DEMO_DELIVER_SECRET, ownerNumber: process.env.OWNER_WHATSAPP,
   });
   const port = Number(process.env.DEMO_PORT || 3002);
   server.listen(port, "127.0.0.1", () => console.log(`customer's phone (demo) on http://127.0.0.1:${port}`));

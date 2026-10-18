@@ -13,7 +13,7 @@ import pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
 
 const SERVICES = { dashboard: "dashboard_app", ingest: "ingest_app", brain: "brain_app", publisher: "publisher_app", media: "media_app", spend: "spend_app",
-  qualifier: "qualifier_app", voice: "voice_app", demo: "demo_app" } as const;
+  qualifier: "qualifier_app", voice: "voice_app", demo: "demo_app", notifier: "notifier_app" } as const;
 const service = (process.argv[2] ?? "dashboard") as keyof typeof SERVICES;
 if (!(service in SERVICES)) {
   console.error(`Unknown service "${service}". Use one of: ${Object.keys(SERVICES).join(", ")}`);

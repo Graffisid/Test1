@@ -8,6 +8,7 @@ const MAP: Record<string, { icon: string; label: string; tone: string }> = {
   approved: { icon: "✓", label: "Approved", tone: "good" },
   rejected: { icon: "✕", label: "Declined", tone: "critical" },
   expired: { icon: "⌛", label: "Expired", tone: "neutral" },
+  published: { icon: "▶", label: "Posted", tone: "good" },
 };
 
 /** Status always ships icon + label — color never carries meaning alone. */

@@ -29,7 +29,11 @@
     "texts:agent": "tsx workflows/text-agent.ts",
     "agents:loop": "tsx workflows/agent-loop.ts",
     "demo:phone": "tsx src/demo/server.ts",
-    "voice:dispatcher": "tsx workflows/voice-dispatcher.ts"
+    "voice:dispatcher": "tsx workflows/voice-dispatcher.ts",
+    "market:analyze": "tsx workflows/content-studio.ts market",
+    "content:create": "tsx workflows/content-studio.ts content",
+    "whatsapp:notify": "tsx workflows/whatsapp-approvals.ts",
+    "db:set-owner-whatsapp": "tsx db/set-owner-whatsapp.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

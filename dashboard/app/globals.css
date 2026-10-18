@@ -580,3 +580,36 @@ main { max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px; }
   .timeline li { animation: none; break-inside: avoid; }
   .digest { box-shadow: none; }
 }
+
+/* ---- content studio ---- */
+.studio-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 18px; }
+.studio-strip { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: -8px 0 22px; }
+.stack { display: grid; gap: 22px; }
+.studio-items { display: grid; gap: 14px; }
+.studio-item { padding: 14px 16px; border-radius: 14px; background: var(--surface-2); display: grid; gap: 8px; animation: rise 0.4s ease both; }
+.si-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.si-head strong { flex: 1; min-width: 12em; }
+.si-format { display: inline-flex; gap: 5px; align-items: center; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.si-hook { font-size: 1.02rem; }
+.si-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.8rem; color: var(--muted); align-items: center; }
+.si-meta span { display: inline-flex; gap: 4px; align-items: center; text-transform: none; }
+.score { font-weight: 700; color: var(--accent); }
+.si-checks summary { cursor: pointer; font-size: 0.84rem; display: inline-flex; gap: 6px; align-items: center; color: var(--good); }
+.si-checks ul { display: grid; gap: 4px; margin-top: 8px; font-size: 0.82rem; }
+.si-checks li { display: flex; gap: 6px; align-items: baseline; }
+.si-checks li.ok .icon { color: var(--good); }
+.si-checks li.bad .icon { color: var(--bad); }
+.sub { font-size: 0.92rem; margin: 16px 0 8px; }
+.brief-list { display: grid; gap: 8px; }
+.brief-list li { display: grid; gap: 2px; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin-bottom: 10px; }
+.comp-table th, .comp-table td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--hairline); }
+.comp-table th { color: var(--muted); font-weight: 500; }
+.pv-post.studio { white-space: normal; }
+.pv-hook { font-weight: 600; font-size: 1rem; }
+.pv-tags { color: var(--accent); font-size: 0.82rem; }
+.storyboard, .slides { display: grid; gap: 8px; counter-reset: s; }
+.storyboard li { display: grid; grid-template-columns: 40px 1fr; gap: 10px; align-items: start; }
+.sb-sec { font-size: 0.75rem; font-weight: 700; background: var(--surface); border-radius: 8px; padding: 4px 6px; text-align: center; }
+.slides li { padding: 8px 10px; border-radius: 10px; background: var(--surface); }
+.brief-list .pill { justify-self: start; }

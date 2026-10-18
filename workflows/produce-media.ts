@@ -10,7 +10,8 @@
  *   npm run media:produce
  */
 import type pg from "pg";
-import { MOCK_VOICES, MockVideoProvider, MockVoiceProvider, type MediaProvider } from "../src/lib/media.ts";
+import { MOCK_VOICES, MockImageProvider, MockVideoProvider, MockVoiceProvider, type MediaProvider } from "../src/lib/media.ts";
+import { validateMediaUrl } from "../src/lib/media-validate.ts";
 import { newClient } from "../src/lib/db.ts";
 
 export interface ProduceResult {
@@ -106,12 +107,77 @@ export async function produceMedia(
   return { status: "done", generated, failed, batchCostCad: batchCost };
 }
 
+export interface ContentMediaResult { made: number; waiting: number; refused: number; batchCostCad: number }
+
+/**
+ * Media for APPROVED content-studio items: a video and a voiceover for a reel, one picture for an image post,
+ * one per slide for a carousel. Only after the owner's yes (generation costs money in reality). Every URL a
+ * provider returns is checked (src/lib/media-validate.ts) before it is stored. If a provider is switched off
+ * in Connections the item waits; the same batch threshold applies.
+ */
+export async function produceContentMedia(
+  db: pg.ClientBase,
+  providers: { video: MediaProvider; voice: MediaProvider; image: MediaProvider } =
+    { video: new MockVideoProvider(), voice: new MockVoiceProvider(), image: new MockImageProvider() },
+  opts: { batchThresholdCad?: number } = {},
+): Promise<ContentMediaResult> {
+  const threshold = opts.batchThresholdCad ?? Number(process.env.MEDIA_BATCH_THRESHOLD_CAD || 25);
+  const { rows: items } = await db.query<{ id: string; kind: string; title: string; hook: string; body: { scenes?: { voiceover: string }[]; slides?: unknown[] } }>(
+    `SELECT c.id, c.kind, c.title, c.hook, c.body FROM content_items c JOIN approvals a ON a.content_item_id = c.id
+     WHERE c.status = 'approved' AND a.status = 'approved' AND c.media IS NULL ORDER BY a.decided_at LIMIT 10`);
+  const { rows: sw } = await db.query<{ key: string; on: boolean }>(
+    `SELECT k AS key, integration_on(k) AS on FROM unnest(ARRAY['higgsfield','elevenlabs','image_gen']) k`);
+  const isOn = (k: string) => sw.find((r) => r.key === k)?.on ?? false;
+  let made = 0, waiting = 0, refused = 0, batchCost = 0;
+
+  for (const it of items) {
+    const jobs: { provider: MediaProvider; key: string; script: string; id: string }[] = it.kind === "reel"
+      ? [{ provider: providers.video, key: "higgsfield", script: it.hook, id: it.id },
+         { provider: providers.voice, key: "elevenlabs", script: (it.body.scenes ?? []).map((s) => s.voiceover).join(" ") || it.hook, id: it.id }]
+      : Array.from({ length: it.kind === "carousel" ? Math.max(1, it.body.slides?.length ?? 1) : 1 },
+          (_, i) => ({ provider: providers.image, key: "image_gen", script: it.title, id: it.kind === "carousel" ? `${it.id}-${i + 1}` : it.id }));
+    if (jobs.some((j) => !isOn(j.key))) { waiting++; continue; }
+    const cost = jobs.reduce((s, j) => s + j.provider.estCostCad, 0);
+    if (batchCost + cost > threshold) {
+      await db.query(`INSERT INTO agent_activity_log (agent, department, action, decision, status) VALUES ('media-producer', 'content_studio', 'stop_generation', $1, 'escalated')`,
+        [`Stopped: the next post's media would take this batch to $${(batchCost + cost).toFixed(2)}, over the $${threshold.toFixed(2)} threshold. Owner decision needed.`]);
+      break;
+    }
+    const media: { video?: string; voiceover?: string; images: string[]; simulated: true; est_cost_cad: number } = { images: [], simulated: true, est_cost_cad: 0 };
+    let problem: string | null = null;
+    for (const j of jobs) {
+      const r = await j.provider.generate({ variantId: j.id, script: j.script, voiceId: j.provider.kind === "voiceover" ? MOCK_VOICES[0] : undefined });
+      const check = r.ok && r.url ? validateMediaUrl(r.url, j.provider.kind) : { ok: false, reason: r.error ?? "no file returned" };
+      if (!check.ok) { problem = `${j.provider.kind}: ${check.reason}`; break; }
+      media.est_cost_cad += r.estCostCad;
+      if (j.provider.kind === "image") media.images.push(r.url!);
+      else media[j.provider.kind] = r.url!;
+    }
+    batchCost += media.est_cost_cad;
+    if (problem) {
+      refused++;
+      await db.query(`INSERT INTO agent_activity_log (agent, department, action, decision, status, entity_type, entity_id)
+         VALUES ('media-producer', 'content_studio', 'generate_asset', $1, 'error', 'content_item', $2)`,
+        [`Media refused for "${it.title.slice(0, 80)}" — ${problem}. Nothing stored; not retrying.`, it.id]);
+      continue;
+    }
+    await db.query(`UPDATE content_items SET media = $2 WHERE id = $1 AND media IS NULL`, [it.id, JSON.stringify(media)]);
+    await db.query(`INSERT INTO agent_activity_log (agent, department, action, decision, entity_type, entity_id, est_cost_cad)
+       VALUES ('media-producer', 'content_studio', 'generate_asset', $1, 'content_item', $2, $3)`,
+      [`${it.kind === "reel" ? "Video + voiceover" : `${media.images.length} picture(s)`} for "${it.title.slice(0, 80)}" — simulated, no credits used`, it.id, media.est_cost_cad]);
+    made++;
+  }
+  return { made, waiting, refused, batchCostCad: batchCost };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const db = newClient(process.env.MEDIA_DATABASE_URL || undefined);
   await db.connect();
   try {
     const r = await produceMedia(db);
     console.log(`media-producer: ${r.status} — ${r.generated} generated, ${r.failed} failed, est. $${r.batchCostCad.toFixed(2)} (simulated)`);
+    const c = await produceContentMedia(db);
+    console.log(`content media: ${c.made} post(s) ready, ${c.waiting} waiting on a switched-off provider, ${c.refused} refused (simulated)`);
   } finally {
     await db.end();
   }

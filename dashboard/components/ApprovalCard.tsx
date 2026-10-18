@@ -101,6 +101,34 @@ function Preview({ kind, p, leadId }: { kind: string; p: Record<string, unknown>
       </div>
     );
   }
+  if (kind === "organic_post" && str(p.format)) {
+    const scenes = Array.isArray(p.scenes) ? (p.scenes as { seconds: number; shot: string; on_screen_text: string; voiceover: string }[]) : [];
+    const slides = Array.isArray(p.slides) ? (p.slides as { headline: string; body: string }[]) : [];
+    const tags = Array.isArray(p.hashtags) ? (p.hashtags as string[]) : [];
+    const at = str(p.scheduled_for) ? new Date(str(p.scheduled_for)!).toLocaleString("en-CA", { timeZone: "America/Toronto", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null;
+    return (
+      <div className="pv-post studio">
+        <p className="pv-hook">“{str(p.hook)}”</p>
+        {scenes.length > 0 && (
+          <ol className="plain storyboard">
+            {scenes.map((s, i) => (
+              <li key={i}><span className="sb-sec">{s.seconds}s</span><div><strong>{s.on_screen_text || "—"}</strong>
+                <p className="muted small">{s.shot}</p>{s.voiceover && <p className="small">🎙 {s.voiceover}</p>}</div></li>
+            ))}
+          </ol>
+        )}
+        {slides.length > 0 && (
+          <ol className="plain slides">
+            {slides.map((s, i) => <li key={i}><strong>{s.headline}</strong><p className="small">{s.body}</p></li>)}
+          </ol>
+        )}
+        {!scenes.length && !slides.length && str(p.visual_brief) && <p className="small muted">Picture: {str(p.visual_brief)}</p>}
+        <p>{str(p.caption)}</p>
+        {tags.length > 0 && <p className="pv-tags">{tags.join(" ")}</p>}
+        <p className="pv-meta">{[str(p.format)?.replace("_", " "), str(p.platform), at].filter(Boolean).join(" · ")}</p>
+      </div>
+    );
+  }
   if (kind === "organic_post") {
     return (
       <div className="pv-post">
@@ -151,7 +179,7 @@ export function ApprovalCard({ a }: { a: ApprovalView }) {
   }, null);
   const busy = approving || rejecting || saving;
   const pending = a.status === "pending";
-  const editable = EDITABLE[a.kind];
+  const editable = a.payload.format ? undefined : EDITABLE[a.kind];
 
   return (
     <article className={`approval ${a.needs_fact_check ? "flagged" : ""} ${busy ? "busy" : ""}`} aria-busy={busy}>

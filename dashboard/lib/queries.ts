@@ -415,3 +415,52 @@ export async function getNewApprovals(sinceIso: string): Promise<{ id: string; k
   return q(`SELECT id, kind, title, created_at FROM approvals WHERE status = 'pending' AND created_at > $1::timestamptz
             ORDER BY created_at LIMIT 5`, [sinceIso]);
 }
+
+// ---------------------------------------------------------- content studio ----
+
+export interface StudioBrief {
+  id: string; created_at: string; llm_mode: string; model: string;
+  brief: { summary: string; what_works: { insight: string; evidence: string }[]; gaps: string[];
+    angles: { angle: string; why: string; format: string }[]; avoid: string[];
+    posting_plan: { day: string; time: string; format: string; theme: string }[] };
+  stats: { period_days: number; competitors: { name: string; active_ads: number; learn_from: number; avg_days_running: number;
+    longest_running: { title: string; days: number; format: string | null } | null }[];
+    themes: { theme: string; ads: number }[]; formats: Record<string, number> };
+}
+export interface StudioItem {
+  id: string; kind: string; platform: string; title: string; hook: string; status: string; scheduled_for: string | null;
+  checks: { name: string; ok: boolean; detail: string }[]; score: { total: number }; media: Record<string, unknown> | null;
+  created_at: string; approval_status: string | null; decided_by: string | null; decision_note: string | null;
+  wa_sent_at: string | null; wa_reply: string | null;
+}
+export interface StudioData {
+  brief: StudioBrief | null;
+  items: StudioItem[];
+  requests: { id: string; kind: string; status: string; result_note: string | null; created_at: string }[];
+  drops: { at: string; decision: string }[];
+  whatsapp: { on: boolean; number: string | null; owner: string | null };
+}
+
+export async function getStudio(): Promise<StudioData> {
+  const [briefs, items, requests, drops, wa, ch] = await Promise.all([
+    q<StudioBrief>(`SELECT id, created_at, llm_mode, model, brief, stats FROM market_briefs ORDER BY created_at DESC LIMIT 1`),
+    q<StudioItem>(`
+      SELECT c.id, c.kind, c.platform, c.title, c.hook, c.status, c.scheduled_for, c.checks, c.score, c.media, c.created_at,
+             a.status AS approval_status, a.decided_by, a.decision_note,
+             (SELECT w.sent_at FROM whatsapp_messages w WHERE w.idempotency_key = 'wa:approval:' || a.id::text) AS wa_sent_at,
+             (SELECT w.outcome FROM whatsapp_messages w WHERE w.approval_id = a.id AND w.direction = 'inbound'
+              ORDER BY w.sent_at DESC LIMIT 1) AS wa_reply
+      FROM content_items c LEFT JOIN approvals a ON a.content_item_id = c.id
+      ORDER BY c.created_at DESC LIMIT 12`),
+    q<StudioData["requests"][number]>(`SELECT id, kind, status, result_note, created_at FROM agent_requests ORDER BY created_at DESC LIMIT 4`),
+    q<{ at: string; decision: string }>(`SELECT created_at AS at, decision FROM agent_activity_log
+      WHERE action = 'guardrail_drop' ORDER BY created_at DESC LIMIT 5`),
+    q<{ on: boolean }>(`SELECT integration_on('whatsapp') AS on`),
+    q<{ address_e164: string; owner_name: string }>(`SELECT address_e164, owner_name FROM owner_channels
+      WHERE channel = 'whatsapp' AND enabled LIMIT 1`),
+  ]);
+  return {
+    brief: briefs[0] ?? null, items, requests, drops,
+    whatsapp: { on: wa[0]?.on ?? false, number: ch[0] ? `••••${ch[0].address_e164.slice(-4)}` : null, owner: ch[0]?.owner_name ?? null },
+  };
+}

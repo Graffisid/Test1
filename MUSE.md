@@ -203,6 +203,22 @@ understand goes to the owner; it never improvises. Every text identifies the bus
 | `reschedule-v1` | Owner declined the time, or it expired | Sorry {first_name}, that time no longer works on our side. Someone from Northshore will call you today to find a better one. |
 | `declined-v1` | Customer replied NO | No problem at all, {first_name}. If anything changes, just text us back. Reply STOP to opt out. |
 
+## Content studio rules
+
+- The market analyst learns from competitors' long-running ads; the writer **never copies, quotes, names
+  or criticises** a competitor.
+- Posts use only the verified facts above. Formats: reels 15–35 s with an on-screen hook in the first 3 s;
+  carousels 4–7 slides; image posts with a clear picture brief. Up to 8 hashtags. Canadian spelling.
+- Every draft passes eight checks in code before the owner sees it; the best 3 by the analyst's score go
+  for approval. Post drafts expire after 48 h. Posts go out at the time shown in the request.
+
+## WhatsApp approvals
+
+- Requests go only to the owner's registered number. Reply `APPROVE <code>` or `REJECT <code>` (a reason
+  may follow). Each code works once, for one item, until the item expires.
+- Budget changes and ad launches are **never** approved by phone — dashboard only.
+- We never ask for a password or payment details on WhatsApp. Replies from other numbers are ignored.
+
 ## Agent roster
 
 | Agent | Owns | Never allowed to |
@@ -247,6 +263,8 @@ call is placed. The consent wording below is a DRAFT until reviewed.
 Customers can also choose to be **texted** a quote and book by text; the owner confirms every booking. Texts
 are simulated. Each outside service has an owner on/off switch (dashboard → Connections), enforced by the
 database.
+The **content studio** (market analysis → reels/posts → WhatsApp approval) runs on the mock model;
+WhatsApp is simulated (Twilio WhatsApp in reality). Live Claude (Opus 5.5) needs the owner's OK.
 Every external integration (Meta, TikTok,
 ElevenLabs, Twilio, Higgsfield, Google Calendar, Telegram/Slack, Anthropic API)
 is stubbed. No real API keys, no real ad spend, no real calls.

@@ -3,7 +3,7 @@
  * It is deliberately simple (keyword rules / templates) and deliberately imperfect in places — the
  * ad-writer mock includes a few non-compliant drafts so the auditor and analyst have real work.
  */
-import type { AdDraft, TriageOutput } from "./schemas.ts";
+import type { AdDraft, ContentDraft, ContentPlan, MarketBrief, TriageOutput } from "./schemas.ts";
 
 const has = (text: string, words: RegExp) => words.test(text);
 
@@ -86,8 +86,119 @@ export function mockAdWriter(input: Record<string, unknown>): { variants: AdDraf
   return { variants };
 }
 
+/** A brief built straight from the computed numbers — what a careful analyst would say about them. */
+export function mockMarketBrief(input: Record<string, unknown>): MarketBrief {
+  const stats = input as { competitors?: { name: string; active_ads: number; learn_from: number; avg_days_running: number;
+    longest_running: { days: number; format: string | null } | null }[]; themes?: { theme: string; ads: number }[];
+    formats?: Record<string, number>; ours?: { best: { ad: string; cpl: number | null } | null } };
+  const comps = stats.competitors ?? [];
+  const themes = stats.themes ?? [];
+  const top = comps[0];
+  const videoHooks = stats.formats?.video_hook ?? 0;
+  const total = Object.values(stats.formats ?? {}).reduce((a, b) => a + b, 0) || 1;
+  const best = stats.ours?.best;
+  return {
+    summary: `${comps.length} local competitors are advertising. The ads that keep running ${themes[0] ? `lean on "${themes[0].theme.toLowerCase()}"` : "are simple and local"}`
+      + `${videoHooks ? `, and ${Math.round((videoHooks / total) * 100)}% of reviewed ads open with a video hook` : ""}. `
+      + `${best ? `Our cheapest leads come from ${best.ad}${best.cpl !== null ? ` at $${best.cpl.toFixed(2)} per lead` : ""}. ` : ""}`
+      + "The opening: nobody is explaining warning signs calmly, so show real problems and what a licensed tech checks.",
+    what_works: [
+      ...(top?.longest_running ? [{ insight: "Long-running ads are simple and seasonal",
+        evidence: `${top.name}'s longest ad has run ${top.longest_running.days} days (${top.longest_running.format ?? "format not reviewed"})` }] : []),
+      ...themes.slice(0, 2).map((t) => ({ insight: `"${t.theme}" keeps coming back`, evidence: `${t.ads} competitor ads use it` })),
+      ...(best ? [{ insight: "Our call-back promise converts", evidence: `${best.ad} is our cheapest source of leads` }] : []),
+    ].slice(0, 6).concat(themes.length || top || best ? [] : [{ insight: "Not enough data yet", evidence: "No competitor ads in the period" }]),
+    gaps: [
+      "Nobody shows what a tune-up actually includes, step by step",
+      "Few ads speak to Burlington and Oakville by name",
+      "No one answers common questions in a calm, expert voice",
+    ],
+    angles: [
+      { angle: "Three sounds your furnace makes and what they mean", why: "Warning signs recur in long-running ads; we can explain them better", format: "reel" },
+      { angle: "What a licensed tech checks in a tune-up", why: "Fills the 'what's included' gap and shows proof (licensed and insured)", format: "carousel" },
+      { angle: "Before the first cold night", why: "Seasonal urgency is the most common long-running theme", format: "image_post" },
+      { angle: "24/7 emergency line, local crew", why: "Fast response is a verified fact and a proven theme", format: "reel" },
+    ],
+    avoid: [
+      "Price promises and discounts (only the $129 service call is verified)",
+      "Fear-based scare tactics — calm expertise performs better for trust",
+      "Copying any competitor's wording or format one-for-one",
+    ],
+    posting_plan: [
+      { day: "Tuesday", time: "evening", format: "reel", theme: "Warning signs" },
+      { day: "Thursday", time: "morning", format: "carousel", theme: "What a tune-up includes" },
+      { day: "Saturday", time: "morning", format: "image_post", theme: "Before the first cold night" },
+    ],
+  };
+}
+
+/** Drafts from the brief — plus one that breaks the rules, so the guardrails visibly earn their keep. */
+export function mockContentPlan(input: Record<string, unknown>): ContentPlan {
+  const base = { scenes: [], slides: [], visual_brief: "", claims_used: [] } as Pick<ContentDraft, "scenes" | "slides" | "visual_brief" | "claims_used">;
+  const items: ContentDraft[] = [
+    { ...base, kind: "reel", platform: "instagram", title: "3 furnace sounds you shouldn't ignore",
+      hook: "Is your furnace making one of these sounds?",
+      scenes: [
+        { seconds: 3, shot: "Close-up of a basement furnace panel, warm light", on_screen_text: "Hear this from your furnace?", voiceover: "Is your furnace making one of these sounds?" },
+        { seconds: 5, shot: "Tech points at the blower housing", on_screen_text: "1. Rattling at start-up", voiceover: "A rattle when it kicks on can mean a loose panel or blower part." },
+        { seconds: 5, shot: "Tech checks the burner area with a flashlight", on_screen_text: "2. A loud bang", voiceover: "A bang at ignition is worth a look before the cold sets in." },
+        { seconds: 5, shot: "Tech listens near the motor", on_screen_text: "3. High-pitched squeal", voiceover: "A squeal often points to a belt or motor bearing." },
+        { seconds: 6, shot: "Tech closes the panel and smiles at camera in a Burlington home", on_screen_text: "Licensed. Insured. Local.", voiceover: "Licensed and insured techs in Burlington and Oakville. Tap to get a call back." },
+      ],
+      caption: "Furnaces usually warn you before they quit. If you're hearing a rattle, a bang or a squeal, a licensed Northshore tech can take a look. Serving Burlington, Oakville, Hamilton Mountain and Milton. Tap to get a call back.",
+      hashtags: ["#Burlington", "#Oakville", "#FurnaceTuneUp", "#HomeMaintenance", "#OntarioHomes"], cta: "Get a call back",
+      angle: "Warning signs", why_it_should_work: "Names a problem people can hear right now, in the first 3 seconds, and answers it calmly with proof.",
+      posting_day: "Tuesday", posting_time: "evening" },
+    { ...base, kind: "carousel", platform: "instagram", title: "What a licensed tech checks in a tune-up",
+      hook: "Ever wondered what a furnace tune-up actually covers?",
+      slides: [
+        { headline: "What's in a tune-up?", body: "Here's what a licensed Northshore tech checks, step by step." },
+        { headline: "Filter and airflow", body: "A clogged filter makes your furnace work harder." },
+        { headline: "Burners and ignition", body: "Clean, steady ignition means fewer surprises." },
+        { headline: "Blower and motor", body: "We listen for wear before it becomes a breakdown." },
+        { headline: "Safety checks", body: "Venting and controls, checked by a licensed tech." },
+        { headline: "Book yours", body: "Serving Burlington, Oakville, Hamilton Mountain and Milton. Get a call back." },
+      ],
+      visual_brief: "Clean, bright cover photo of a furnace with a technician's gloved hand holding a new filter; brand colours, no text overlay beyond the title.",
+      caption: "Swipe to see what a licensed tech checks in a furnace tune-up. Licensed and insured, serving Burlington, Oakville, Hamilton Mountain and Milton. Tap to get a call back.",
+      hashtags: ["#FurnaceTuneUp", "#Burlington", "#HomeTips", "#Heating"], cta: "Get a call back",
+      angle: "What's included", why_it_should_work: "Fills the 'what's included' gap; carousels earn saves and shares.",
+      posting_day: "Thursday", posting_time: "morning" },
+    { ...base, kind: "image_post", platform: "facebook", title: "Before the first cold night",
+      hook: "Is your furnace ready for the first cold night?",
+      visual_brief: "A cozy Burlington living room at dusk, frost on the window, a thermostat glowing at 21 °C; warm, natural light; no people's faces.",
+      caption: "Is your furnace ready for the first cold night? A quick check by a licensed Northshore tech now beats a no-heat call later. Free in-home quotes for furnace and heat-pump replacements. Tap to get a call back.",
+      hashtags: ["#Burlington", "#Oakville", "#FallMaintenance", "#Heating"], cta: "Get a call back",
+      angle: "Seasonal urgency", why_it_should_work: "Seasonal urgency is the most common long-running theme; local and calm.",
+      posting_day: "Saturday", posting_time: "morning" },
+    { ...base, kind: "reel", platform: "instagram", title: "24/7 emergency line",
+      hook: "Burst pipe at 2 a.m.?",
+      scenes: [
+        { seconds: 3, shot: "Phone lighting up on a nightstand at night", on_screen_text: "Burst pipe at 2 a.m.?", voiceover: "Burst pipe at 2 a.m.?" },
+        { seconds: 5, shot: "Northshore van pulling into a driveway", on_screen_text: "24/7 emergency line", voiceover: "Our emergency line is open 24/7." },
+        { seconds: 6, shot: "Tech shutting off a water valve calmly", on_screen_text: "Licensed and insured", voiceover: "A licensed, insured local crew, serving Burlington and Oakville." },
+        { seconds: 4, shot: "Tech wiping hands, giving a thumbs up", on_screen_text: "Call (905) 555-0100", voiceover: "Save our number: (905) 555-0100." },
+      ],
+      caption: "Plumbing emergencies don't wait for business hours, and neither do we. 24/7 emergency line, licensed and insured, serving Burlington, Oakville, Hamilton Mountain and Milton. Call now.",
+      hashtags: ["#Burlington", "#EmergencyPlumber", "#Oakville"], cta: "Call now",
+      angle: "Fast response", why_it_should_work: "A verified, proven theme; the hook is a moment everyone fears.",
+      posting_day: "Wednesday", posting_time: "evening" },
+    // Deliberately non-compliant: banned claim, unverified price, shouting, a link. The guardrails must drop it.
+    { ...base, kind: "image_post", platform: "facebook", title: "Cheapest tune-up deal",
+      hook: "CHEAPEST furnace tune-up in Halton!!",
+      visual_brief: "Big red sale banner over a furnace photo with a starburst graphic.",
+      caption: "Tune-ups from $79 this week only. Book at www.example-deals.com",
+      hashtags: ["#Deal"], cta: "Book now", angle: "Price", why_it_should_work: "Discounts get clicks.",
+      posting_day: "Friday", posting_time: "morning" },
+  ];
+  const batch = Number(input.batch) || items.length;
+  return { items: items.slice(0, Math.max(1, batch)) };
+}
+
 export function mockComplete(agent: string, input: Record<string, unknown>): unknown {
   if (agent === "triage") return mockTriage(input);
   if (agent === "ad-writer") return mockAdWriter(input);
+  if (agent === "market-analyst") return mockMarketBrief(input);
+  if (agent === "content-writer") return mockContentPlan(input);
   throw new Error(`No mock for agent ${agent}`);
 }

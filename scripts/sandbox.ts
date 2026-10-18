@@ -8,7 +8,8 @@
  *   1. Refuses to run unless DATABASE_URL points at a local database (it can reset it).
  *   2. Creates every least-privilege login with a fresh random password (never the superuser).
  *   3. Writes those connection strings and a random owner password to .sandbox/ (gitignored, chmod 600).
- *   4. Starts the webhook receiver + capture form (:3001), the voice dispatcher, the agent loop (sorting,
+ *   4. Sets the owner's (fictional) WhatsApp number — the only number that can approve from a phone.
+ *   5. Starts the webhook receiver + capture form (:3001), the voice dispatcher, the agent loop (sorting,
  *      replies, texts, publishing), the demo "customer's phone" (:3002), and the dashboard (:3000).
  *
  * Everything external stays simulated: no Meta, no ad spend, no calls, no paid AI. Ctrl-C stops it all.
@@ -46,7 +47,7 @@ if (!keep) {
 }
 
 // 2. Logins (fresh random passwords each start)
-const services = ["dashboard", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo"] as const;
+const services = ["dashboard", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
 const urls: Record<string, string> = {};
 for (const s of services) {
   const pw = secret();
@@ -56,6 +57,10 @@ for (const s of services) {
   u.password = pw;
   urls[s] = u.toString();
 }
+
+// The owner's (fictional) WhatsApp number: the only sender whose replies can approve anything.
+const OWNER_WHATSAPP = "+19055550111";
+run("set owner WhatsApp", tsx("db/set-owner-whatsapp.ts"), { OWNER_WHATSAPP, OWNER_NAME: "Dana Reyes" });
 
 // 3. Environment (gitignored, owner-only)
 const ownerPassword = secret(12);
@@ -69,6 +74,7 @@ const env: Record<string, string> = {
   SPEND_DATABASE_URL: urls.spend,
   QUALIFIER_DATABASE_URL: urls.qualifier,
   VOICE_DATABASE_URL: urls.voice,
+  NOTIFIER_DATABASE_URL: urls.notifier,
   META_APP_SECRET: secret(),
   META_WEBHOOK_VERIFY_TOKEN: secret(),
   CAPTURE_LINK_SECRET: secret(32),
@@ -76,6 +82,10 @@ const env: Record<string, string> = {
   TWILIO_AUTH_TOKEN: secret(),
   DEMO_MODE: "1",
   DEMO_DATABASE_URL: urls.demo,
+  DEMO_DELIVER_SECRET: secret(32),
+  DEMO_PHONE_URL: "http://127.0.0.1:3002",
+  OWNER_WHATSAPP,
+  DASHBOARD_URL: "http://127.0.0.1:3000",
 };
 mkdirSync(DIR, { recursive: true, mode: 0o700 });
 const envFile = join(DIR, "sandbox.env");
@@ -162,6 +172,9 @@ if (!(await ready("http://127.0.0.1:3000/login")) || !(await ready("http://127.0
  Password    ${ownerPassword}     (also in .sandbox/owner-password.txt)
 
  Customer's phone (for demos)   http://127.0.0.1:3002
+ Your WhatsApp (for demos)      http://127.0.0.1:3002/owner
+   Content studio → "Analyse the market" → "Create posts": the best drafts arrive on your WhatsApp
+   with a one-time code. Approve or reject there (or in the dashboard).
    Comment on the post, open the link in Northshore's reply, choose "Text me a quote",
    then answer the texts. Approve the booking on the dashboard. Full script: dashboard → Demo.
 

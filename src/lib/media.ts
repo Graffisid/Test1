@@ -8,7 +8,7 @@ export interface MediaResult { ok: boolean; url?: string; estCostCad: number; er
 
 export interface MediaProvider {
   readonly name: string;
-  readonly kind: "video" | "voiceover";
+  readonly kind: "video" | "voiceover" | "image";
   readonly estCostCad: number;     // estimate per generation, checked against the batch threshold first
   generate(req: MediaRequest): Promise<MediaResult>;
 }
@@ -36,5 +36,17 @@ export class MockVoiceProvider implements MediaProvider {
   async generate(req: MediaRequest): Promise<MediaResult> {
     if (this.failFor.has(req.variantId)) return { ok: false, estCostCad: 0, error: "simulated generation failure" };
     return { ok: true, url: `mock://media/voice/${req.variantId}-${req.voiceId}.mp3`, estCostCad: this.estCostCad };
+  }
+}
+
+/** Pictures for image posts and carousels (provider still to be chosen with the owner). */
+export class MockImageProvider implements MediaProvider {
+  readonly name = "mock_image_gen";
+  readonly kind = "image" as const;
+  readonly estCostCad = 0.1;
+  constructor(private readonly failFor: Set<string> = new Set()) {}
+  async generate(req: MediaRequest): Promise<MediaResult> {
+    if (this.failFor.has(req.variantId)) return { ok: false, estCostCad: 0, error: "simulated generation failure" };
+    return { ok: true, url: `mock://media/image/${req.variantId}.png`, estCostCad: this.estCostCad };
   }
 }

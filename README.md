@@ -278,6 +278,24 @@ npm run leads:qualify         # approved-template replies with capture links; le
   Every confirmation page has an opt-out link, which withdraws consent for that
   number and suppresses it.
 
+## Content studio and WhatsApp approvals
+
+The market analyst reads competitors' ads (what they run, how long, which format, which themes) and your
+own results, and writes a brief. The content writer turns it into reels, image posts and carousels. Every
+draft passes eight guardrails in code (`src/brain/content-guard.ts`); the best 3 go to your WhatsApp with a
+one-time code and to the Today page. Approved posts get their media, then publish at their scheduled time.
+
+```bash
+npm run market:analyze      # brief (mock model unless LLM_MODE=live)
+npm run content:create      # drafts → guardrails → approval requests
+npm run whatsapp:notify     # send pending requests to the owner's WhatsApp (simulated)
+OWNER_WHATSAPP=+1XXXXXXXXXX OWNER_NAME='Your Name' npm run db:set-owner-whatsapp   # as the DB owner
+```
+
+In the sandbox: dashboard → **Studio** → "Analyse the market" → "Create posts", then open the pretend
+phone's **Owner WhatsApp** tab (http://127.0.0.1:3002/owner) and tap Approve. "Reply APPROVE from a
+stranger's number" shows that nobody else can approve. See SECURITY.md for every check.
+
 ## Dashboard
 
 ```bash

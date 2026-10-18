@@ -178,7 +178,8 @@ export async function rejectAction(_prev: ActionState | null, form: FormData): P
 export async function editAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
   const id = String(form.get("id") ?? "");
   return withPendingApproval(id, async (client, row) => {
-    const fields = EDITABLE[row.kind];
+    // Content-studio posts passed the safety checks as written; an edit would skip them. Reject with a note instead.
+    const fields = row.payload.format ? undefined : EDITABLE[row.kind];
     if (!fields) return { ok: false, message: "This kind of approval can't be edited — reject it with a note instead." };
     const changes: Record<string, string> = {};
     for (const [key, max] of Object.entries(fields)) {
@@ -207,4 +208,30 @@ export async function editAction(_prev: ActionState | null, form: FormData): Pro
         : "Saved — still pending your approval.",
     };
   }) as Promise<ActionState>;
+}
+
+/** Ask the team for a market analysis or new posts. The dashboard can only queue a request; the agent loop runs it. */
+export async function requestAgentAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
+  try {
+    await requireOwner();
+  } catch {
+    return { ok: false, message: "Your session has expired. Sign in again." };
+  }
+  const kind = String(form.get("kind") ?? "");
+  if (kind !== "market_analysis" && kind !== "create_content") return { ok: false, message: "Unknown request." };
+  const client = await pool.connect();
+  try {
+    await client.query(`INSERT INTO agent_requests (kind, requested_by) VALUES ($1, $2)`, [kind, OWNER_NAME]);
+    return { ok: true, message: kind === "market_analysis" ? "The analyst is studying the market — results in a moment."
+      : "The writer is drafting posts. The best ones will arrive on your WhatsApp and here." };
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === "23505") return { ok: true, message: "Already on it — that request is still running." };
+    if (code === "23514") return { ok: false, message: "Daily limit reached (20 requests). This protects your AI budget. Try again tomorrow." };
+    console.error("agent request failed", { kind, error: (err as Error).message });
+    return { ok: false, message: "The request was refused and nothing was queued. Details are in the server log." };
+  } finally {
+    client.release();
+    revalidatePath("/studio");
+  }
 }

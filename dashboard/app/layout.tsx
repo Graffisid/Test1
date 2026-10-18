@@ -30,6 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {authed && (
             <nav aria-label="Main">
               <Link href="/">Today</Link>
+              <Link href="/studio">Studio</Link>
               <Link href="/customers">Customers</Link>
               <Link href="/connections">Connections</Link>
               <Link href="/demo">Demo</Link>

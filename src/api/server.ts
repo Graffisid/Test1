@@ -4,6 +4,8 @@
  *   GET  /webhooks/meta   Meta subscription verification (hub.verify_token → hub.challenge)
  *   POST /webhooks/meta   signed deliveries → signals
  *   POST /webhooks/sms    Twilio-signed inbound texts → messages (src/api/sms-webhook.ts), when configured
+ *   POST /webhooks/whatsapp  Twilio-signed WhatsApp replies from the owner → decide_via_whatsapp(), when configured.
+ *                            Attachments are never downloaded or opened; only the text is read.
  *   /c/<token>, /u/<token> lead-capture form and opt-out (src/api/capture.ts), when configured
  *
  * Order of checks on POST: size limit → signature (HMAC over the raw bytes) → JSON parse → ingest.
@@ -28,6 +30,8 @@ export interface IngestServerOptions {
   capture?: CaptureOptions;
   /** Inbound texts. publicUrl is the exact URL Twilio posts to (it is part of the signature). Disabled when absent. */
   sms?: { authToken: string; publicUrl: string };
+  /** The owner's WhatsApp approvals (same Twilio signing). Disabled when absent. */
+  whatsapp?: { authToken: string; publicUrl: string };
 }
 
 function send(res: ServerResponse, status: number, body: string) {
@@ -95,6 +99,28 @@ export function createIngestServer(opts: IngestServerOptions): Server {
         if (!/^\+\d{8,15}$/.test(from) || !body || !/^[A-Za-z0-9]{10,64}$/.test(sid)) return send(res, 400, "bad request");
         const { rows } = await opts.pool.query<{ lead: string | null }>(`SELECT record_inbound_sms($1, $2, $3) AS lead`, [from, body, sid]);
         log("sms received", { matched: !!rows[0]?.lead });
+        res.writeHead(200, { "content-type": "text/xml; charset=utf-8", "cache-control": "no-store" });
+        return res.end("<Response></Response>");
+      }
+      if (opts.whatsapp && url.pathname === "/webhooks/whatsapp") {
+        if (req.method !== "POST") return send(res, 405, "method not allowed");
+        let raw: Buffer;
+        try {
+          raw = await readBody(req, 16_384);
+        } catch (err) {
+          if (err instanceof TooLarge) return send(res, 413, "payload too large");
+          throw err;
+        }
+        const params = new URLSearchParams(raw.toString("utf8"));
+        if (!verifyTwilioSignature(opts.whatsapp.publicUrl, params, req.headers["x-twilio-signature"] as string | undefined, opts.whatsapp.authToken)) {
+          log("whatsapp refused: bad or missing signature");
+          return send(res, 401, "invalid signature");
+        }
+        const from = (params.get("From") ?? "").replace(/^whatsapp:/, ""), body = (params.get("Body") ?? "").trim(), sid = params.get("MessageSid") ?? "";
+        if (!/^\+\d{8,15}$/.test(from) || !/^[A-Za-z0-9]{10,64}$/.test(sid) || body.length > 1000) return send(res, 400, "bad request");
+        // Media (MediaUrl0…) is ignored on purpose: nothing sent to us is ever fetched, opened or stored.
+        const { rows } = await opts.pool.query<{ outcome: string }>(`SELECT decide_via_whatsapp($1, $2, $3) AS outcome`, [from, body || "(no text)", sid]);
+        log("whatsapp reply received", { outcome: rows[0]?.outcome });
         res.writeHead(200, { "content-type": "text/xml; charset=utf-8", "cache-control": "no-store" });
         return res.end("<Response></Response>");
       }

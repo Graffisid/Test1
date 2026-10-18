@@ -9,12 +9,12 @@
  * using the activity log as the ledger — the cap holds even if a prompt asks for more.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type pg from "pg";
 import type { z } from "zod";
 import { mockComplete } from "./mock-llm.ts";
 
-export type BrainAgent = "triage" | "ad-writer";
+export type BrainAgent = "triage" | "ad-writer" | "market-analyst" | "content-writer";
 export type Effort = "low" | "medium" | "high";
 
 export interface LlmRequest<T> {
@@ -62,12 +62,16 @@ export class AnthropicLlm implements StructuredLlm {
   constructor(readonly model = process.env.LLM_MODEL || "claude-opus-5-5") {}
 
   async complete<T>(req: LlmRequest<T>): Promise<LlmResult> {
-    const response = await this.client.messages.parse({
+    // Server-side refusal fallback: if a safety classifier declines, the API re-runs the same request on a
+    // fallback model inside this call, instead of the step failing. The result is still schema-validated.
+    const response = await this.client.beta.messages.parse({
       model: this.model,
       max_tokens: req.maxTokens,
       system: req.system,
       messages: [{ role: "user", content: req.user }],
-      output_config: { effort: req.effort, format: zodOutputFormat(req.schema) },
+      output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
     });
     const usage = response.usage;
     const estCostCad = ((usage.input_tokens * PRICE_USD.input + usage.output_tokens * PRICE_USD.output) / 1e6) * USD_TO_CAD;

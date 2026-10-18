@@ -21,13 +21,15 @@ const PUBLISHABLE = ["ad_variant", "organic_post", "reputation_reply"];
 export async function publishApproved(db: pg.ClientBase): Promise<PublishResult> {
   const out: PublishResult = { published: [], held: [] };
   const { rows } = await db.query<{ id: string; kind: string; title: string; ad_variant_id: string | null; ad_status: string | null;
-    media_ready: boolean }>(
+    media_ready: boolean; content_item_id: string | null; content_media: boolean; content_due: boolean }>(
     `SELECT a.id, a.kind, a.title, a.ad_variant_id, ad.status AS ad_status,
-            (v.video_url IS NOT NULL AND v.voiceover_url IS NOT NULL) AS media_ready
+            (v.video_url IS NOT NULL AND v.voiceover_url IS NOT NULL) AS media_ready,
+            a.content_item_id, (c.media IS NOT NULL) AS content_media, (c.scheduled_for IS NULL OR c.scheduled_for <= now()) AS content_due
      FROM approvals a
      LEFT JOIN publications p ON p.approval_id = a.id
      LEFT JOIN ads ad ON ad.id = a.ad_id
      LEFT JOIN ad_variants v ON v.id = a.ad_variant_id
+     LEFT JOIN content_items c ON c.id = a.content_item_id
      WHERE a.status = 'approved' AND p.id IS NULL AND a.kind = ANY($1)
      ORDER BY a.decided_at`, [PUBLISHABLE]);
 
@@ -40,12 +42,25 @@ export async function publishApproved(db: pg.ClientBase): Promise<PublishResult>
       out.held.push({ approvalId: a.id, reason: "video/voiceover not ready — run media:produce" });
       continue;
     }
+    // Content-studio posts wait for their media and their scheduled time (the time the owner approved).
+    if (a.content_item_id && !a.content_media) {
+      out.held.push({ approvalId: a.id, reason: "pictures/video not ready yet" });
+      continue;
+    }
+    if (a.content_item_id && !a.content_due) {
+      out.held.push({ approvalId: a.id, reason: "scheduled for later" });
+      continue;
+    }
     await db.query("BEGIN");
     try {
       await db.query(
         `INSERT INTO publications (approval_id, kind, target_type, target_id, is_simulated, idempotency_key)
          VALUES ($1, $2, $3, $4, true, $5)`,
-        [a.id, a.kind, a.kind === "ad_variant" ? "ad_variant" : a.kind, a.ad_variant_id, `publish:${a.id}`]);
+        [a.id, a.kind, a.content_item_id ? "content_item" : a.kind === "ad_variant" ? "ad_variant" : a.kind,
+         a.content_item_id ?? a.ad_variant_id, `publish:${a.id}`]);
+      if (a.content_item_id) {
+        await db.query(`UPDATE content_items SET status = 'published' WHERE id = $1 AND status = 'approved'`, [a.content_item_id]);
+      }
       if (a.kind === "ad_variant") {
         await db.query(
           `UPDATE ad_variants SET status = 'live', published_at = now(), idempotency_key = 'publish:' || id::text

@@ -48,6 +48,12 @@ forced onto an ad.
 | `integrations` | One outside service (Facebook & Instagram, Twilio, ElevenLabs, Google Calendar, …), its mode, and the owner's on/off switch | — (`key` primary key) |
 | `messages` | One text message to or from a lead (append-only) | `sms:<lead>:<step>` for outbound, **NOT NULL** when outbound |
 | `quotes` | The price a lead was texted (from the MUSE.md price list), the times offered, the time chosen | `quote:<lead>`, plus `UNIQUE(lead_id)` |
+| `market_briefs` | The market analyst's brief: stats computed in code + the model's schema-checked reading of them | — |
+| `content_items` | A reel, image post or carousel draft that passed every guardrail, with its checks, score, media, and status | — (one approval each) |
+| `agent_requests` | The owner asked from the dashboard for a market analysis or new posts | — (one queued per kind; 20 a day) |
+| `owner_channels` | The owner's WhatsApp number — the only sender whose replies count | — (`UNIQUE(channel, address_e164)`) |
+| `approval_codes` | One-time WhatsApp code per approval, stored as a SHA-256 hash, expiring with it | — (`UNIQUE(approval_id, channel_id)`) |
+| `whatsapp_messages` | One WhatsApp message to or from the owner (append-only, codes masked) | `wa:approval:<id>` / `wa:ack:<msg>` for outbound |
 | `metrics` | Daily platform numbers per variant: spend, impressions, clicks, platform leads | — (`UNIQUE(metric_date, ad_variant_id)`) |
 | `agent_activity_log` | Every agent decision and every outbound action | Set for outbound actions |
 

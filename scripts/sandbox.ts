@@ -22,6 +22,8 @@ import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 const ROOT = join(import.meta.dirname, "..");
 const DIR = join(ROOT, ".sandbox");
 const keep = process.argv.includes("--keep");
+// Next.js sends anonymous usage telemetry by default; the sandbox makes no outbound calls at all.
+process.env.NEXT_TELEMETRY_DISABLED = "1";
 const adminUrl = databaseUrl();
 assertLocalDatabase(adminUrl, "sandbox");
 

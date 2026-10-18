@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { SampleCall } from "@/components/SampleCall";
 import { Icon } from "@/components/Icon";
@@ -38,7 +38,11 @@ export default async function Demo() {
   await requireOwnerPage();
   const sandbox = process.env.DEMO_MODE === "1";
   const phoneUrl = process.env.DEMO_PHONE_URL || "http://127.0.0.1:3002";
-  const hasAudio = existsSync(path.join(process.cwd(), "public", "demo-call", "manifest.json"));
+  let voiced: number[] = [];
+  try {
+    const m = JSON.parse(readFileSync(path.join(process.cwd(), "public", "demo-call", "manifest.json"), "utf8"));
+    voiced = Array.isArray(m.lines) ? m.lines.filter((n: unknown) => Number.isInteger(n)) : [];
+  } catch { /* no audio generated yet: read-along */ }
   return (
     <>
       <section className="hero rise">
@@ -77,7 +81,7 @@ export default async function Demo() {
           </header>
           <p className="muted small">The live assistant uses an ElevenLabs voice over your Twilio number. It says it&apos;s an assistant, quotes only your
             prices, and leaves the final confirmation to you.</p>
-          <SampleCall lines={SAMPLE_CALL.lines} agentName={SAMPLE_CALL.agentName} customerName={SAMPLE_CALL.customerName} hasAudio={hasAudio} />
+          <SampleCall lines={SAMPLE_CALL.lines} agentName={SAMPLE_CALL.agentName} customerName={SAMPLE_CALL.customerName} voiced={voiced} />
         </section>
       </div>
     </>

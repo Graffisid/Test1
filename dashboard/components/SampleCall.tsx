@@ -5,10 +5,11 @@ import type { CallLine } from "@/lib/sample-call";
 import { Icon } from "./Icon";
 
 /**
- * Plays the sample call line by line, highlighting who is speaking. With generated voice audio
- * (public/demo-call/manifest.json) it plays the real voices; without it, it reads along at speaking pace.
+ * Plays the sample call line by line, highlighting who is speaking. Lines with generated voice audio
+ * (public/demo-call/manifest.json) play the real voice; any others read along at speaking pace.
  */
-export function SampleCall({ lines, agentName, customerName, hasAudio }: { lines: CallLine[]; agentName: string; customerName: string; hasAudio: boolean }) {
+export function SampleCall({ lines, agentName, customerName, voiced }: { lines: CallLine[]; agentName: string; customerName: string; voiced: number[] }) {
+  const has = (i: number) => voiced.includes(i + 1);
   const [current, setCurrent] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
@@ -21,7 +22,7 @@ export function SampleCall({ lines, agentName, customerName, hasAudio }: { lines
   const playFrom = (i: number) => {
     if (i >= lines.length) { setPlaying(false); setCurrent(-1); return; }
     setCurrent(i);
-    if (hasAudio) {
+    if (has(i)) {
       const a = new Audio(`/demo-call/${String(i + 1).padStart(2, "0")}.mp3`);
       audio.current = a;
       a.onended = () => { timer.current = setTimeout(() => playFrom(i + 1), 250); };
@@ -49,12 +50,13 @@ export function SampleCall({ lines, agentName, customerName, hasAudio }: { lines
         <button type="button" className="btn primary" onClick={toggle}>
           <Icon name={playing ? "minus" : "play"} /> {playing ? "Pause" : current >= 0 ? "Resume" : "Play the call"}
         </button>
-        <span className={`call-live ${playing ? "on" : ""}`}><span className="live-dot" />{playing ? "On the call" : hasAudio ? "Voice audio ready" : "Read-along (voice audio not generated yet)"}</span>
+        <span className={`call-live ${playing ? "on" : ""}`}><span className="live-dot" />{playing ? "On the call" : voiced.length === lines.length ? "Real voices (ElevenLabs)"
+          : voiced.length ? `${voiced.length} of ${lines.length} lines voiced; the rest read along` : "Read-along (voice audio not generated yet)"}</span>
       </div>
       <ol className="call-lines">
         {lines.map((l, i) => (
           <li key={i} className={`${l.who} ${i === current ? "now" : ""} ${current > i ? "done" : ""}`}>
-            <span className="call-who">{l.who === "agent" ? agentName : customerName}</span>
+            <span className="call-who">{l.who === "agent" ? agentName : customerName}{voiced.length > 0 && !has(i) ? " · no audio yet" : ""}</span>
             <p>{l.text}</p>
           </li>
         ))}

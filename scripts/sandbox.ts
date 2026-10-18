@@ -14,7 +14,7 @@
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { databaseUrl } from "../src/lib/db.ts";
 import { assertLocalDatabase } from "../src/lib/db-guard.ts";
@@ -80,8 +80,17 @@ chmodSync(envFile, 0o600);
 writeFileSync(join(DIR, "owner-password.txt"), ownerPassword + "\n", { mode: 0o600 });
 
 // 4. Services
-if (!existsSync(join(ROOT, "dashboard/.next/BUILD_ID"))) {
-  console.log("sandbox: building the dashboard (first run only)…");
+// Rebuild when there is no build yet, or when any dashboard source is newer than it (e.g. after git pull).
+const buildId = join(ROOT, "dashboard/.next/BUILD_ID");
+const newest = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((m, e) => {
+  const p = join(dir, e.name);
+  return Math.max(m, e.isDirectory() ? newest(p) : statSync(p).mtimeMs);
+}, 0);
+const sources = ["app", "components", "lib"].map((d) => join(ROOT, "dashboard", d)).concat(join(ROOT, "dashboard/proxy.ts"));
+const stale = !existsSync(buildId) ||
+  Math.max(...sources.map((p) => (statSync(p).isDirectory() ? newest(p) : statSync(p).mtimeMs))) > statSync(buildId).mtimeMs;
+if (stale) {
+  console.log("sandbox: building the dashboard (first run, or the code changed)…");
   const r = spawnSync("npm", ["run", "build"], { cwd: join(ROOT, "dashboard"), stdio: "inherit", shell: process.platform === "win32" });
   if (r.status !== 0) process.exit(1);
 }

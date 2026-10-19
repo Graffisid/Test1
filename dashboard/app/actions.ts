@@ -93,9 +93,13 @@ export async function toggleConnectionAction(_prev: ActionState | null, form: Fo
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows: [row] } = await client.query<{ name: string; mode: string; enabled: boolean }>(
-      `SELECT name, mode, enabled FROM integrations WHERE key = $1 FOR UPDATE`, [key]);
+    const { rows: [row] } = await client.query<{ name: string; mode: string; enabled: boolean; connected: boolean }>(
+      `SELECT name, mode, enabled, connected FROM integrations WHERE key = $1 FOR UPDATE`, [key]);
     if (!row) { await client.query("ROLLBACK"); return { ok: false, message: "Unknown connection." }; }
+    if (on && !row.connected) {
+      await client.query("ROLLBACK");
+      return { ok: false, message: `Connect ${row.name} first — then you can switch it on.` };
+    }
     if (on && row.mode === "not_set_up") {
       await client.query("ROLLBACK");
       return { ok: false, message: `${row.name} isn't set up yet, so it can't be switched on.` };
@@ -115,6 +119,7 @@ export async function toggleConnectionAction(_prev: ActionState | null, form: Fo
   } finally {
     client.release();
     revalidatePath("/connections");
+    revalidatePath("/profile/connections");
   }
 }
 

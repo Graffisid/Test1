@@ -237,11 +237,12 @@ export const AGENTS = ["growth-director", "triage", "ad-writer", "media-producer
 export interface Integration {
   key: string; name: string; category: string; purpose: string; used_by: string; when_off: string;
   mode: "simulated" | "live" | "not_set_up"; enabled: boolean; changed_by: string | null; changed_at: string | null;
+  connected: boolean; account_label: string | null; connected_at: string | null;
 }
 
 export async function getIntegrations(): Promise<Integration[]> {
   return q<Integration>(`
-    SELECT key, name, category, purpose, used_by, when_off, mode, enabled, changed_by, changed_at
+    SELECT key, name, category, purpose, used_by, when_off, mode, enabled, changed_by, changed_at, connected, account_label, connected_at
     FROM integrations ORDER BY sort, name`);
 }
 
@@ -601,4 +602,32 @@ export async function getCustomerTimeline(f: TimelineFilter): Promise<{ rows: Ti
       FROM t GROUP BY channel ORDER BY n DESC`, [f.days]),
   ]);
   return { rows, channels };
+}
+
+// ------------------------------------------------------------------ profile ----
+
+export interface Profile {
+  display_name: string; email: string | null; phone_e164: string | null; business_name: string; address: string | null; city: string | null;
+  website: string | null; service_area: string | null; hours: string | null; updated_at: string;
+}
+export interface ProfileData {
+  profile: Profile;
+  whatsapp: { number: string | null; auto: boolean; on: boolean };
+  pendingChange: { masked: string; sent: boolean; expires_at: string; attempts: number } | null;
+}
+
+export async function getProfile(): Promise<ProfileData> {
+  const [[profile], [ch], [wa], [chg]] = await Promise.all([
+    q<Profile>(`SELECT display_name, email, phone_e164, business_name, address, city, website, service_area, hours, updated_at FROM owner_profile WHERE id = 1`),
+    q<{ address_e164: string; auto_send: boolean }>(`SELECT address_e164, auto_send FROM owner_channels WHERE channel = 'whatsapp' AND enabled LIMIT 1`),
+    q<{ on: boolean }>(`SELECT integration_on('whatsapp') AS on`),
+    q<{ new_address: string; sent_at: string | null; expires_at: string; attempts: number }>(`
+      SELECT new_address, sent_at, expires_at, attempts FROM owner_channel_changes
+      WHERE confirmed_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1`),
+  ]);
+  return {
+    profile,
+    whatsapp: { number: ch ? `••• ••• ${ch.address_e164.slice(-4)}` : null, auto: ch?.auto_send ?? false, on: wa?.on ?? false },
+    pendingChange: chg ? { masked: `••••${chg.new_address.slice(-4)}`, sent: !!chg.sent_at, expires_at: chg.expires_at, attempts: chg.attempts } : null,
+  };
 }

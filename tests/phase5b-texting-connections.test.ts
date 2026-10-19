@@ -284,12 +284,12 @@ describe("guardrails in the database", () => {
     }
   });
 
-  test("the dashboard may flip a switch, nothing else about a connection; 'not set up' can't be switched on", async () => {
+  test("the dashboard may flip a switch, nothing else about a connection; a service that isn't connected can't be switched on", async () => {
     await as("dashboard_app", (c) => c.query(`UPDATE integrations SET enabled = false, changed_by = 'Dana', changed_at = now() WHERE key = 'telegram'`));
     await as("dashboard_app", (c) => c.query(`UPDATE integrations SET enabled = true WHERE key = 'telegram'`));
     await assert.rejects(as("dashboard_app", (c) => c.query(`UPDATE integrations SET mode = 'live' WHERE key = 'telegram'`)), /permission denied/);
     await assert.rejects(as("dashboard_app", (c) => c.query(`UPDATE integrations SET enabled = true WHERE key = 'tiktok'`)),
-      /integrations_set_up_before_on/);
+      /integrations_on_needs_account/);
   });
 
   test("the demo phone's role can only read", async () => {

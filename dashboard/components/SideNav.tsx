@@ -12,7 +12,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/customers", label: "Customers", icon: "users" },
   { href: "/digest", label: "Reports", icon: "chart" },
   { href: "/demo", label: "Demo", icon: "play" },
-  { href: "/connections", label: "Connections", icon: "plug" },
+  { href: "/profile/connections", label: "Connections", icon: "plug" },
 ];
 
 export function SideNav({ pending }: { pending: number }) {

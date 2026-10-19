@@ -278,11 +278,12 @@ export function createDemoServer(o: DemoOptions) {
     });
     let msg: { to?: unknown; body?: unknown } = {};
     try { msg = raw ? JSON.parse(raw) : {}; } catch { /* refused below */ }
-    if (msg.to !== owner || typeof msg.body !== "string" || !msg.body || msg.body.length > 4096) {
+    // The owner's number, or a new number being verified in the owner's profile.
+    if (typeof msg.to !== "string" || !/^\+[1-9]\d{7,14}$/.test(msg.to) || typeof msg.body !== "string" || !msg.body || msg.body.length > 4096) {
       res.writeHead(400).end("bad request");
       return;
     }
-    wa.push({ from: "business", body: msg.body, at: new Date() });
+    wa.push({ from: "business", body: msg.to === owner ? msg.body : `To ${msg.to} (new number being verified):\n${msg.body}`, at: new Date() });
     if (wa.length > 200) wa.splice(0, wa.length - 200);
     res.writeHead(204).end();
   }

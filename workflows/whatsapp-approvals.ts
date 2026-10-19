@@ -96,15 +96,50 @@ const ACK: Record<string, string> = {
 
 const on = async (db: pg.ClientBase) => (await db.query<{ on: boolean }>(`SELECT integration_on('whatsapp') AS on`)).rows[0].on;
 
-export interface NotifyResult { sent: number; acked: number; skipped: "connection_off" | "no_owner_number" | null }
+export interface NotifyResult { sent: number; acked: number; verified?: number; skipped: "connection_off" | "no_owner_number" | null }
+
+/**
+ * Number change: send a one-time 6-digit code to the NEW number. Only someone holding that phone can then move
+ * approvals to it (confirm_whatsapp_change in the database). The code is stored hashed; the stored message is masked.
+ */
+export async function sendVerificationCodes(db: pg.ClientBase, sender: WhatsAppSender): Promise<number> {
+  const { rows } = await db.query<{ id: string; new_address: string }>(
+    `SELECT id, new_address FROM owner_channel_changes
+     WHERE code_hash IS NULL AND confirmed_at IS NULL AND expires_at > now() ORDER BY created_at LIMIT 3`);
+  let n = 0;
+  for (const r of rows) {
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    const body = `Your Northshore Growth Desk code is ${code}. Enter it in your profile to get approvals on this number. ` +
+      "It expires in 15 minutes. If you didn't ask for this, ignore it — nothing changes.";
+    await db.query("BEGIN");
+    let msgId: string | undefined;
+    try {
+      const { rowCount } = await db.query(`UPDATE owner_channel_changes SET code_hash = $2, sent_at = now() WHERE id = $1 AND code_hash IS NULL`,
+        [r.id, createHash("sha256").update(`${r.id}:${code}`, "utf8").digest("hex")]);
+      if (!rowCount) { await db.query("ROLLBACK"); continue; }
+      ({ rows: [{ id: msgId }] } = await db.query<{ id: string }>(
+        `INSERT INTO whatsapp_messages (direction, address_e164, body, idempotency_key) VALUES ('outbound', $1, $2, $3) RETURNING id`,
+        [r.new_address, maskCode(body, code), `wa:verify:${r.id}`]));
+      await db.query("COMMIT");
+    } catch (err) {
+      await db.query("ROLLBACK");
+      throw err;
+    }
+    const sent = await sender.send(r.new_address, body);
+    await db.query(`UPDATE whatsapp_messages SET provider_message_id = $2 WHERE id = $1`, [msgId, sent.providerMessageId]);
+    n++;
+  }
+  return n;
+}
 
 export async function notifyOwner(db: pg.ClientBase, sender: WhatsAppSender,
   opts: { dashboardUrl?: string } = {}): Promise<NotifyResult> {
   const dashboardUrl = opts.dashboardUrl ?? process.env.DASHBOARD_URL ?? "http://127.0.0.1:3000";
   if (!(await on(db))) return { sent: 0, acked: 0, skipped: "connection_off" };
+  const verified = await sendVerificationCodes(db, sender);
   const { rows: [ch] } = await db.query<{ id: string; address_e164: string; auto_send: boolean }>(
     `SELECT id, address_e164, auto_send FROM owner_channels WHERE channel = 'whatsapp' AND enabled ORDER BY created_at LIMIT 1`);
-  if (!ch) return { sent: 0, acked: 0, skipped: "no_owner_number" };
+  if (!ch) return { sent: 0, acked: 0, verified, skipped: "no_owner_number" };
 
   // 1. Requests.
   const { rows } = await db.query<Pending>(
@@ -160,7 +195,7 @@ export async function notifyOwner(db: pg.ClientBase, sender: WhatsAppSender,
     await db.query(`UPDATE whatsapp_messages SET provider_message_id = $2 WHERE id = $1`, [out.id, r.providerMessageId]);
     acked++;
   }
-  return { sent, acked, skipped: null };
+  return { sent, acked, verified, skipped: null };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

@@ -5,17 +5,16 @@ import { Horseshoe } from "@/components/charts/Horseshoe";
 import { OverviewBoard, type KpiDef } from "@/components/charts/OverviewBoard";
 import { TrendProjection } from "@/components/charts/TrendProjection";
 import { fmt } from "@/components/charts/fmt";
-import { OWNER_NAME } from "@/lib/db";
 import { requireOwnerPage } from "@/lib/session";
 import { AGENT_LABEL, TZ, plainDecision, relative } from "@/lib/format";
-import { expireStaleApprovals, getActivity, getOverview, getPendingApprovals } from "@/lib/queries";
+import { expireStaleApprovals, getActivity, getOverview, getPendingApprovals, getProfile } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function Overview() {
   await requireOwnerPage();
   await expireStaleApprovals();
-  const [o, pending, activity] = await Promise.all([getOverview(), getPendingApprovals(), getActivity({ limit: 6 })]);
+  const [o, pending, activity, { profile }] = await Promise.all([getOverview(), getPendingApprovals(), getActivity({ limit: 6 }), getProfile()]);
   const now = Date.now();
   const hour = Number(new Date(now).toLocaleString("en-CA", { timeZone: TZ, hour: "numeric", hour12: false }));
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -48,7 +47,7 @@ export default async function Overview() {
       <header className="page-head rise">
         <div>
           <p className="eyebrow">{today}</p>
-          <h1>{greeting}, {OWNER_NAME.split(" ")[0]}</h1>
+          <h1>{greeting}, {profile.display_name.split(" ")[0]}</h1>
           <p className="page-sub">
             Last 7 days: <strong>{fmt("money", spend)}</strong> of ads brought <strong>{leads} enquiries</strong> and{" "}
             <strong>{fmt("money", revenue)}</strong> collected{speedPct !== null ? <> · <strong>{fmt("pct", speedPct)}</strong> called back within a minute</> : null}.

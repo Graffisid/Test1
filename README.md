@@ -310,7 +310,11 @@ from real rows: last 7 days vs the week before, a 12-week graph, a live feed, an
 rules it can't break (`dashboard/lib/team.ts`). **Customers** is a day-by-day timeline of every enquiry (channel, request,
 how far they got, filters by period, channel, stage and name), and each person's page opens with their journey —
 reached out → details & consent → callback or text → booked → paid, with the time between steps — above the full
-audit trail. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
+audit trail. **Profile** (click your name in the sidebar) holds your details, business details and WhatsApp settings
+(auto-send switch; changing the number needs your password and a code sent to the new number). **Connections** lists
+every service — Facebook & Instagram, TikTok, LinkedIn, Twilio, WhatsApp, Telegram, ElevenLabs, Google Calendar,
+Calendly, Trello, Claude, Higgsfield, image generation — with Connect (a practice sign-in for now), an on/off switch
+and Disconnect. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
 
 ```bash
 # once: least-privilege DB login for the dashboard (never the superuser)

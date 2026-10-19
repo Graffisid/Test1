@@ -54,6 +54,8 @@ forced onto an ad.
 | `owner_channels` | The owner's WhatsApp number — the only sender whose replies count | — (`UNIQUE(channel, address_e164)`) |
 | `approval_codes` | One-time WhatsApp code per approval, stored as a SHA-256 hash, expiring with it | — (`UNIQUE(approval_id, channel_id)`) |
 | `whatsapp_messages` | One WhatsApp message to or from the owner (append-only, codes masked) | `wa:approval:<id>` / `wa:ack:<msg>` for outbound |
+| `owner_profile` | The owner's name, contact details and business details (one row) | — |
+| `owner_channel_changes` | A requested WhatsApp number change, waiting for the code sent to the new number | — |
 | `metrics` | Daily platform numbers per variant: spend, impressions, clicks, platform leads | — (`UNIQUE(metric_date, ad_variant_id)`) |
 | `agent_activity_log` | Every agent decision and every outbound action | Set for outbound actions |
 

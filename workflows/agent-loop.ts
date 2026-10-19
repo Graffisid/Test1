@@ -109,6 +109,7 @@ async function cycle() {
     if (cm?.made) say(`video studio: media ready for ${cm.made} approved post(s) (simulated)`);
     const w = await step("whatsapp", pools.notifier, (db) => notifyOwner(db, whatsapp));
     if (w?.sent || w?.acked) say(`WhatsApp: ${w.sent} approval request(s), ${w.acked} reply/replies to you (simulated)`);
+    if (w?.verified) say(`WhatsApp: verification code sent to your new number (simulated)`);
     const p = await step("publish", pools.publisher, (db) => publishApproved(db));
     if (p?.published.length) say(`publisher: ${p.published.length} item(s) published (simulated)`);
     const s = await step("spend", pools.spend, (db) => executeSpend(db));

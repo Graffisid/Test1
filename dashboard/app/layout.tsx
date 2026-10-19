@@ -7,7 +7,7 @@ import { Notifier } from "@/components/Notifier";
 import { SideNav } from "@/components/SideNav";
 import { Toaster } from "@/components/Toaster";
 import { OWNER_NAME } from "@/lib/db";
-import { getPendingCount } from "@/lib/queries";
+import { getPendingCount, getProfile } from "@/lib/queries";
 import { isOwner } from "@/lib/session";
 import { logoutAction } from "./auth-actions";
 import "./globals.css";
@@ -25,7 +25,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   await headers(); // every page renders per request, so each gets its own CSP nonce
   const authed = await isOwner();
   const pending = authed ? await getPendingCount() : 0;
-  const initials = OWNER_NAME.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const shownName = authed ? (await getProfile()).profile.display_name : OWNER_NAME;
+  const initials = shownName.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
     <html lang="en-CA" className={`${sans.variable} ${display.variable}`}>
       <body className={authed ? "with-shell" : ""}>
@@ -44,8 +45,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   Sandbox<span className="sr-only">: practice mode with made-up data. Nothing is really posted, spent or called.</span>
                 </span>
                 <div className="me">
-                  <span className="avatar" aria-hidden="true">{initials || "N"}</span>
-                  <span className="me-name"><strong>{OWNER_NAME}</strong><span className="muted small">Owner</span></span>
+                  <Link href="/profile" className="me-link" title="Your profile">
+                    <span className="avatar" aria-hidden="true">{initials || "N"}</span>
+                    <span className="me-name"><strong>{shownName}</strong><span className="muted small">Owner · profile &amp; settings</span></span>
+                  </Link>
                   <form action={logoutAction}>
                     <button type="submit" className="icon-btn" aria-label="Sign out" title="Sign out"><Icon name="logout" /></button>
                   </form>

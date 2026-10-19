@@ -109,7 +109,8 @@ describe("Phase 1 — system of record", () => {
     // Copy an existing row, give it a fresh id (and dodge any *other* unique constraint),
     // keep the idempotency_key — the insert must fail on exactly that constraint.
     const overrides: Record<(typeof OUTBOUND_TABLES)[number], string> = {
-      ads: "id = gen_random_uuid(), platform_ad_id = NULL",
+      // A draft copy: a live one would (correctly) trip the weekly spend cap before the unique key on busy weeks.
+      ads: "id = gen_random_uuid(), platform_ad_id = NULL, status = 'draft'",
       ad_variants: "id = gen_random_uuid(), label = label || '-dup'",
       signals: "id = gen_random_uuid()",
       comments: "id = gen_random_uuid(), signal_id = (SELECT s.id FROM signals s WHERE s.source = 'ad_library' LIMIT 1)",

@@ -1,0 +1,49 @@
+{
+  "name": "ai-social-team",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:migrate": "tsx db/migrate.ts",
+    "db:seed": "tsx db/seed.ts",
+    "sandbox": "tsx scripts/sandbox.ts",
+    "db:reset": "tsx db/migrate.ts --reset && tsx db/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "db:create-dashboard-login": "tsx db/create-login.ts dashboard",
+    "db:create-login": "tsx db/create-login.ts",
+    "ingest:start": "tsx src/api/start.ts",
+    "simulate:meta": "tsx src/tools/simulate-meta.ts",
+    "poll:competitors": "tsx workflows/poll-competitors.ts",
+    "reviews:import": "tsx src/tools/import-reviews.ts",
+    "brain:triage": "tsx workflows/triage-signals.ts",
+    "brain:write-ads": "tsx workflows/write-ads.ts",
+    "publish:approved": "tsx workflows/publish-approved.ts",
+    "media:produce": "tsx workflows/produce-media.ts",
+    "spend:execute": "tsx workflows/execute-spend.ts",
+    "ads:sync-insights": "tsx workflows/sync-insights.ts",
+    "ads:cycle": "tsx workflows/ad-cycle-48h.ts",
+    "leads:qualify": "tsx workflows/qualify-leads.ts",
+    "texts:agent": "tsx workflows/text-agent.ts",
+    "agents:loop": "tsx workflows/agent-loop.ts",
+    "demo:phone": "tsx src/demo/server.ts",
+    "voice:dispatcher": "tsx workflows/voice-dispatcher.ts",
+    "market:analyze": "tsx workflows/content-studio.ts market",
+    "content:create": "tsx workflows/content-studio.ts content",
+    "whatsapp:notify": "tsx workflows/whatsapp-approvals.ts",
+    "db:set-owner-whatsapp": "tsx db/set-owner-whatsapp.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "pg": "^8.23.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

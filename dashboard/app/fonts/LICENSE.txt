@@ -1,0 +1,3 @@
+Hanken Grotesk (c) The Hanken Grotesk Project Authors, and Sora (c) The Sora Project Authors.
+Both are licensed under the SIL Open Font License, Version 1.1 — https://openfontlicense.org
+Latin subsets downloaded once from Google Fonts and served from this app (no third-party requests at runtime).

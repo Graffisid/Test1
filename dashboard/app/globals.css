@@ -1060,3 +1060,72 @@ form.busy { opacity: 0.7; }
 .consent .actions { display: flex; gap: 8px; justify-content: flex-end; }
 .consent-allow { min-width: 120px; justify-content: center; }
 .consent-foot { display: flex; gap: 6px; align-items: baseline; text-align: left; }
+
+/* ===================================================================================== demo === */
+.story-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.story-track { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(220px, 1fr); gap: 16px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x mandatory; }
+.story-card { scroll-snap-align: start; display: grid; gap: 8px; align-content: start; position: relative; }
+.story-card:not(:last-child)::after { content: ""; position: absolute; top: 14px; right: -16px; width: 16px; height: 2px; background: var(--series-1); }
+.story-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.story-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--series-1); color: #fff; font-weight: 700; font-size: 0.82rem; }
+.story-when { font-size: 0.78rem; color: var(--muted); }
+.story-visual { height: 260px; border-radius: 16px; background: var(--surface-2); display: grid; place-items: center; padding: 12px; overflow: hidden; }
+.story-card h3 { font-size: 0.98rem; }
+.sv-phone { height: 100%; aspect-ratio: 4 / 5; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-lift); }
+.sv-chat { display: grid; gap: 8px; width: 100%; align-content: center; }
+.sv-bubble { padding: 9px 12px; border-radius: 16px; font-size: 0.82rem; max-width: 92%; background: var(--surface); box-shadow: var(--shadow); }
+.sv-bubble b { display: block; font-size: 0.76rem; margin-bottom: 2px; }
+.sv-bubble.them { justify-self: start; }
+.sv-bubble.us { justify-self: end; background: var(--accent-soft); }
+.sv-form { width: 100%; display: grid; gap: 6px; background: var(--surface); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); font-size: 0.82rem; }
+.sv-form p { display: grid; gap: 1px; }
+.sv-form span { color: var(--muted); font-size: 0.72rem; }
+.sv-form .sv-tick { display: flex; gap: 8px; align-items: center; color: var(--ink); margin-top: 4px; }
+.sv-box { width: 18px; height: 18px; border-radius: 5px; background: var(--series-1); color: #fff !important; display: grid; place-items: center; font-size: 0.75rem !important; flex: none; }
+.sv-call, .sv-paid, .sv-cal { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.sv-call-ic { width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; background: var(--good); color: #fff; animation: pulse 2s infinite; }
+.sv-call-ic .icon { width: 2em; height: 2em; }
+.sv-cal { background: var(--surface); border-radius: 18px; padding: 0 0 14px; box-shadow: var(--shadow-lift); width: 170px; overflow: hidden; }
+.sv-cal-m { width: 100%; background: var(--bad); color: #fff; font-weight: 700; padding: 6px; text-transform: uppercase; letter-spacing: 0.1em; font-size: 0.8rem; }
+.sv-cal-d { font-family: var(--font-num); font-size: 3.2rem; font-weight: 600; line-height: 1.1; }
+.sv-cal-t { font-size: 0.8rem; color: var(--ink-2); padding: 0 8px; }
+.sv-paid-amt { font-family: var(--font-num); font-size: 2.6rem; font-weight: 600; color: var(--good); }
+.sv-paid-ok { display: inline-flex; gap: 6px; align-items: center; font-weight: 650; color: var(--good); font-size: 0.85rem; }
+.story.present { display: grid; gap: 22px; min-height: 520px; }
+.present-progress { display: flex; gap: 6px; }
+.present-progress span { flex: 1; height: 5px; border-radius: 3px; background: var(--sunken); transition: background 0.4s; }
+.present-progress span.on { background: var(--series-1); }
+.present-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; animation: rise 0.5s var(--ease) both; }
+@media (max-width: 860px) { .present-body { grid-template-columns: 1fr; } }
+.present-visual { height: 420px; border-radius: 22px; background: var(--surface-2); display: grid; place-items: center; padding: 20px; }
+.present-visual .sv-chat, .present-visual .sv-form { max-width: 380px; font-size: 1rem; }
+.present-visual .sv-bubble { font-size: 0.98rem; }
+.present-text h2 { font-family: var(--font-num); font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 600; letter-spacing: -0.02em; margin-bottom: 10px; }
+.present-text p:not(.eyebrow) { font-size: 1.1rem; color: var(--ink-2); }
+.present-total { display: flex; gap: 8px; align-items: center; margin-top: 16px; padding: 12px 16px; border-radius: 14px; background: var(--good-soft); color: var(--good) !important; font-weight: 650; }
+.present-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.big-funnel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 900px) { .big-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.big-funnel li { display: grid; gap: 2px; padding: 16px; border-radius: 16px; background: var(--surface-2); position: relative; }
+.big-funnel li:last-child { background: var(--good-soft); }
+.big-funnel strong { font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; }
+.bf-n { font-size: 0.72rem; font-weight: 700; color: var(--muted); }
+
+/* ================================================================================== reports === */
+.report-tabs { justify-self: start; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.report-tabs a { white-space: nowrap; flex: none; }
+@media (max-width: 600px) { .report-tabs a { padding: 0 10px; } }
+.period-report { display: grid; gap: 24px; }
+.day-kpis { margin-bottom: 16px; }
+.hbar-list { display: grid; gap: 12px; }
+.hb-head { display: flex; justify-content: space-between; font-size: 0.9rem; }
+.hb { width: 100%; height: 8px; display: block; margin: 5px 0 3px; }
+.table-wrap { overflow-x: auto; }
+.table-wrap .comp-table td:first-child { font-weight: 600; }
+@media print {
+  .sidebar, .no-print, .toaster, .present-controls, .story-bar { display: none !important; }
+  .app { display: block; }
+  .content { padding: 0; max-width: none; }
+  .card, .kpi { box-shadow: none; break-inside: avoid; }
+  body { background: #fff; }
+}

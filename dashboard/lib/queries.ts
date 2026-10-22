@@ -317,6 +317,9 @@ export interface CustomerAudit {
   events: AuditEvent[];
   /** The customer's journey, step by step, with the time each step happened (null = not reached). */
   journey: { key: string; label: string; at: string | null }[];
+  reply: { text: string; at: string } | null;
+  calls: { attempt: number; started_at: string; outcome: string; duration_s: number | null; transcript_summary: string | null }[];
+  texts: { direction: string; body: string; sent_at: string }[];
 }
 
 const platformName = (p: string | null) => (p === "instagram" ? "Instagram" : "Facebook");
@@ -419,6 +422,9 @@ export async function getCustomerAudit(id: string): Promise<CustomerAudit | null
 
   return {
     lead, quote: quote ?? null, appointment: appointment ?? null, events, journey,
+    reply: src?.reply_text && src.replied_at ? { text: src.reply_text.replace(/https?:\/\/\S+/, "[personal quote link]"), at: src.replied_at } : null,
+    calls: calls.map(({ attempt, started_at, outcome, duration_s, transcript_summary }) => ({ attempt, started_at, outcome, duration_s, transcript_summary })),
+    texts: messages.map(({ direction, body, sent_at }) => ({ direction, body, sent_at })),
     source: src ? { platform: src.platform, kind: src.kind, ad_name: src.ad_name, variant_label: src.variant_label, headline: src.headline,
       post_id: src.post_id, published_at: src.published_at, comment: src.comment, commented_at: src.commented_at, author: src.author } : null,
   };
@@ -630,4 +636,68 @@ export async function getProfile(): Promise<ProfileData> {
     whatsapp: { number: ch ? `••• ••• ${ch.address_e164.slice(-4)}` : null, auto: ch?.auto_send ?? false, on: wa?.on ?? false },
     pendingChange: chg ? { masked: `••••${chg.new_address.slice(-4)}`, sent: !!chg.sent_at, expires_at: chg.expires_at, attempts: chg.attempts } : null,
   };
+}
+
+// ------------------------------------------------------------- period reports ----
+
+export interface PeriodReport {
+  days: number;
+  unit: "day" | "week" | "month";
+  buckets: { start: string; revenue: number; spend: number; leads: number; booked: number }[];
+  cur: { revenue: number; spend: number; reach: number; leads: number; calls: number; within60: number; booked: number; paid: number };
+  prev: PeriodReport["cur"];
+  services: { service: string; jobs: number; revenue: number }[];
+  ads: { ad: string; spend: number; leads: number; booked: number; revenue: number }[];
+  channels: { channel: string; leads: number; booked: number }[];
+}
+
+/** One report for the last N complete days, compared with the N days before. Every number reconciles to v_daily_kpis. */
+export async function getPeriodReport(days: number): Promise<PeriodReport> {
+  const unit: PeriodReport["unit"] = days <= 31 ? "day" : days <= 120 ? "week" : "month";
+  const totals = (from: string, to: string) => `
+    SELECT COALESCE(sum(revenue_cad), 0)::float AS revenue, COALESCE(sum(spend_cad), 0)::float AS spend, COALESCE(sum(impressions), 0)::float AS reach,
+           COALESCE(sum(leads), 0)::int AS leads, COALESCE(sum(calls), 0)::int AS calls, COALESCE(sum(calls_within_60s), 0)::int AS within60,
+           COALESCE(sum(booked), 0)::int AS booked, COALESCE(sum(paid_jobs), 0)::int AS paid
+    FROM v_daily_kpis WHERE day BETWEEN ${from} AND ${to}`;
+  const [buckets, [cur], [prev], services, ads, channels] = await Promise.all([
+    q<PeriodReport["buckets"][number]>(`
+      SELECT to_char(date_trunc('${unit}', day), 'YYYY-MM-DD') AS start, sum(revenue_cad)::float AS revenue, sum(spend_cad)::float AS spend,
+             sum(leads)::int AS leads, sum(booked)::int AS booked
+      FROM v_daily_kpis WHERE day BETWEEN ${TODAY} - $1::int AND ${TODAY} - 1 GROUP BY 1 ORDER BY 1`, [days]),
+    q<PeriodReport["cur"]>(totals(`${TODAY} - $1::int`, `${TODAY} - 1`), [days]),
+    q<PeriodReport["cur"]>(totals(`${TODAY} - 2 * $1::int`, `${TODAY} - $1::int - 1`), [days]),
+    q<PeriodReport["services"][number]>(`
+      SELECT service, count(*)::int AS jobs, sum(paid_amount_cad)::float AS revenue FROM appointments
+      WHERE (paid_at AT TIME ZONE 'America/Toronto')::date BETWEEN ${TODAY} - $1::int AND ${TODAY} - 1
+      GROUP BY service ORDER BY revenue DESC`, [days]),
+    q<PeriodReport["ads"][number]>(`
+      WITH s AS (SELECT ad_id, sum(spend_cad)::float AS spend FROM metrics WHERE metric_date BETWEEN ${TODAY} - $1::int AND ${TODAY} - 1 GROUP BY ad_id),
+      l AS (SELECT l.ad_id, count(*)::int AS leads, count(ap.id) FILTER (WHERE ap.status IN ('scheduled','completed'))::int AS booked,
+                   COALESCE(sum(ap.paid_amount_cad), 0)::float AS revenue
+            FROM leads l LEFT JOIN appointments ap ON ap.lead_id = l.id
+            WHERE l.ad_id IS NOT NULL AND (l.created_at AT TIME ZONE 'America/Toronto')::date BETWEEN ${TODAY} - $1::int AND ${TODAY} - 1 GROUP BY l.ad_id)
+      SELECT a.name AS ad, COALESCE(s.spend, 0) AS spend, COALESCE(l.leads, 0) AS leads, COALESCE(l.booked, 0) AS booked, COALESCE(l.revenue, 0) AS revenue
+      FROM ads a LEFT JOIN s ON s.ad_id = a.id LEFT JOIN l ON l.ad_id = a.id
+      WHERE COALESCE(s.spend, 0) > 0 OR COALESCE(l.leads, 0) > 0 ORDER BY revenue DESC, leads DESC LIMIT 8`, [days]),
+    q<PeriodReport["channels"][number]>(`
+      SELECT COALESCE(s.source, 'quote_form') AS channel, count(*)::int AS leads,
+             count(*) FILTER (WHERE EXISTS (SELECT 1 FROM appointments ap WHERE ap.lead_id = l.id AND ap.status IN ('scheduled','completed')))::int AS booked
+      FROM leads l LEFT JOIN comments cm ON cm.id = l.comment_id LEFT JOIN signals s ON s.id = COALESCE(cm.signal_id, l.signal_id)
+      WHERE (l.created_at AT TIME ZONE 'America/Toronto')::date BETWEEN ${TODAY} - $1::int AND ${TODAY} - 1
+      GROUP BY 1 ORDER BY leads DESC`, [days]),
+  ]);
+  return { days, unit, buckets, cur, prev, services, ads, channels };
+}
+
+// ------------------------------------------------------------- demo showcase ----
+
+/** Customers whose whole journey is on record — a public comment on a post through to a paid job — newest first. */
+export async function getShowcaseCandidates(): Promise<string[]> {
+  const rows = await q<{ id: string }>(`
+    SELECT l.id FROM leads l
+    JOIN comments cm ON cm.id = l.comment_id AND cm.reply_text IS NOT NULL
+    JOIN appointments ap ON ap.lead_id = l.id AND ap.paid_at IS NOT NULL
+    WHERE EXISTS (SELECT 1 FROM calls c WHERE c.lead_id = l.id) OR EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id)
+    ORDER BY ap.paid_at DESC LIMIT 12`);
+  return rows.map((r) => r.id);
 }

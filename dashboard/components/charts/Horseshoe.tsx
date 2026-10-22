@@ -23,8 +23,8 @@ const LEN = (Math.PI * RAD * SWEEP) / 180;
  * Money collected in the chosen period, as a horseshoe: teal is what you kept after ad spend, amber is what
  * the ads cost. Switch the period with the buttons; the number, split and comparison all follow.
  */
-export function Horseshoe({ periods }: { periods: Period[] }) {
-  const [days, setDays] = useState(30);
+export function Horseshoe({ periods, initial = 30, fixed = false }: { periods: Period[]; initial?: number; fixed?: boolean }) {
+  const [days, setDays] = useState(initial);
   const p = periods.find((x) => x.days === days) ?? periods[0];
   if (!p) return null;
   const rev = Number(p.revenue), spend = Number(p.spend);
@@ -36,11 +36,11 @@ export function Horseshoe({ periods }: { periods: Period[] }) {
 
   return (
     <div className="horseshoe">
-      <div className="seg" role="group" aria-label="Period">
+      {!fixed && <div className="seg" role="group" aria-label="Period">
         {periods.map((x) => (
           <button key={x.days} type="button" aria-pressed={x.days === days} onClick={() => setDays(x.days)}>{LABEL[x.days]?.short ?? `${x.days}D`}</button>
         ))}
-      </div>
+      </div>}
       <svg viewBox="0 0 240 214" className="hs-svg" role="img"
         aria-label={`${fmt("money", rev)} collected in the ${LABEL[days].long}: ${fmt("money", kept)} kept after ${fmt("money", spend)} of ad spend`}>
         <path d={ARC} className="hs-track" />
@@ -49,7 +49,7 @@ export function Horseshoe({ periods }: { periods: Period[] }) {
         <text x={CX} y={CY - 6} textAnchor="middle" className="hs-value">{fmt("money", rev)}</text>
         <text x={CX} y={CY + 18} textAnchor="middle" className="hs-caption">collected · {LABEL[days].long}</text>
       </svg>
-      <div className="hs-delta"><Delta cur={rev} prev={Number(p.prevRevenue)} vs={LABEL[days].prev} /></div>
+      <div className="hs-delta">{Number(p.prevRevenue) + Number(p.prevSpend) > 0 ? <Delta cur={rev} prev={Number(p.prevRevenue)} vs={LABEL[days].prev} /> : <span className="muted small">No earlier records to compare</span>}</div>
       <dl className="hs-legend">
         <div><dt><i className="sw s1" />Kept after ads</dt><dd>{fmt("money", kept)} <span>{rev > 0 ? fmt("pct", kept / rev) : "—"}</span></dd></div>
         <div><dt><i className="sw s2" />Spent on ads</dt><dd>{fmt("money", spend)} <span>{rev > 0 ? fmt("pct", spendShare) : "—"}</span></dd></div>

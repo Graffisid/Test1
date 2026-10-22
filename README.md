@@ -86,7 +86,11 @@ This command:
 The passwords and service URLs are written to `.sandbox/`. That folder is gitignored and readable only by
 you. `dashboard/.env.local` is never touched. Everything external stays simulated. Ctrl-C stops it all.
 
-**To show a business owner:** open the dashboard's **Demo** page. It is a step-by-step script:
+**To show a business owner:** open the dashboard's **Demo** page. It opens with a picture story of one real
+(fictional) customer, from the reel they saw to the paid job: the post, their comment, our reply, the form and
+consent, the callback or texts, the booking and the receipt, with the time between each step. **Present** plays
+it full screen (arrow keys or autoplay, Esc to leave), and **Show another customer** picks a different one. Below
+it, "What it adds up to" shows the last 30 days as one funnel. Then comes the live script:
 
 1. Comment on the post on the customer's phone.
 2. Open the link in Northshore's reply and choose "Text me a quote".
@@ -102,8 +106,11 @@ The customer's phone sends signed webhooks into the real pipeline, exactly as Fa
 - **Customers:** everyone who reached out. Each has a printable audit trail, from the ad to the booking.
 - **Connections:** every outside service, with an on/off switch, plus what's coming up and the automatic
   routines.
-- **Demo:** the script and a sample phone call.
-- **Daily report.**
+- **Demo:** the reel-to-paid-customer story (with Present mode), the 30-day funnel, the live script and a
+  sample phone call.
+- **Reports:** pick Day, 15 days, 1 month, 3 months, 6 months or 1 year. Each period is compared with the one
+  before it: KPI cards, money collected vs ad spend by day/week/month, the money horseshoe, the funnel, what
+  earned the money, which ads paid off and where people came from. **Print or save as PDF** gives a clean copy.
 
 To drive pieces by hand instead, open a second terminal:
 
@@ -347,8 +354,11 @@ motion. All motion is CSS/SVG, with no animation library, and it switches off un
   - **What your team is doing:** a live feed that refreshes every 5 seconds. Agents have plain role
     names ("Phone assistant", "Ad writer"), repeated entries are folded into one line, and a
     "Needs attention" tab shows only interrupts and escalations.
-- **Daily report (`/digest`):** the one-page summary from `.claude/skills/morning-digest/` for any
-  past day.
+- **Reports (`/digest`):** `?period=day` (the default) is the one-page summary from
+  `.claude/skills/morning-digest/` for any past day, now with changes vs the day before.
+  `?period=15|30|90|180|365` is a graphical report for that period vs the one before it. Periods end
+  yesterday, so they only count complete days. When there are no earlier records (the sandbox has 12 months
+  of history), the page says so instead of showing a fake "new".
 
 **Approve** writes an `approvals` row decided by the owner, plus activity-log rows. It doesn't publish
 or spend by itself: the publisher and the spend executor do that on their next run, and both are

@@ -141,3 +141,13 @@ and reloads.
 | `claim_approvals` | Owner decisions on story statements, pinned to a SHA-256 of the exact numbers | `dashboard_app` (insert only) |
 
 Import history and approvals are append-only for every role (triggers). An agent name can never be recorded as the decider.
+
+## Trisanga: video studio (migration 024)
+
+| Table | What it holds | Who writes |
+|---|---|---|
+| `videos` | One requested video: format, frozen storyboard (every word and number), the approved statements it uses (`claims`: key + hash), render result (file name, SHA-256, size, duration), owner decision | `dashboard_app` requests and decides; `video_app` records the render |
+
+`videos_guard` (trigger) refuses: a request using a statement that isn't the owner's latest "approved" decision with that
+exact hash; any storyboard edit; skipping a status (queued → rendering → ready → approved/rejected; failed → queued); approving
+when a statement was since withdrawn; deleting a video; deciding twice. `video_claims_approved()` is the shared check.

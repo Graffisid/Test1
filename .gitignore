@@ -1,5 +1,6 @@
 .env
 .sandbox/
+.videos/
 .env.*
 !.env.example
 node_modules/

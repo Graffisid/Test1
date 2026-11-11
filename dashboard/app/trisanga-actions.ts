@@ -9,6 +9,7 @@
 import { revalidatePath } from "next/cache";
 import { OWNER_NAME, q } from "@/lib/db";
 import { getCuStory } from "@/lib/oncu";
+import { buildStoryboard } from "@/lib/storyboard";
 import { requireOwner } from "@/lib/session";
 import type { ActionState } from "./actions";
 
@@ -76,4 +77,58 @@ export async function mapRuleAction(_prev: ActionState | null, form: FormData): 
   if (!rows.length) return { ok: false, message: "Unknown pain point or offering." };
   revalidatePath("/offerings");
   return { ok: true, message: "Mapping saved." };
+}
+
+/** Freezes a storyboard from the approved statements and queues it for the render worker. */
+export async function requestVideoAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
+  await requireOwner();
+  const cuId = str(form, "cu_id"), format = str(form, "format");
+  if (!/^[a-z0-9-]{2,40}$/.test(cuId) || !["vertical", "wide"].includes(format)) return { ok: false, message: "That request wasn't valid." };
+  const s = await getCuStory(cuId);
+  if (!s) return { ok: false, message: "Credit union not found." };
+  const built = buildStoryboard({ cu: s.cu, story: s.story, offerings: s.offerings, approved: (c) => s.state(c) === "approved" });
+  if ("missing" in built) return { ok: false, message: `Not ready yet: ${built.missing.join("; ")}.` };
+  const busy = await q(`SELECT 1 FROM videos WHERE cu_id = $1 AND format = $2 AND status IN ('queued', 'rendering')`, [cuId, format]);
+  if (busy.length) return { ok: false, message: "A video in that format is already being made." };
+  try {
+    await q(`INSERT INTO videos (cu_id, format, storyboard, claims, import_id, requested_by) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [cuId, format, JSON.stringify(built.storyboard), JSON.stringify(built.claims), s.cu.last_import_id, OWNER_NAME]);
+  } catch (err) {
+    return { ok: false, message: (err as Error).message.includes("approved") ? "A statement changed before the video was queued. Reload and try again." : "Couldn't queue the video." };
+  }
+  revalidatePath(`/credit-unions/${cuId}`);
+  revalidatePath("/videos");
+  return { ok: true, message: `Queued a ${format === "vertical" ? "vertical (9:16)" : "wide (16:9)"} video. It takes about a minute or two to render.` };
+}
+
+export async function decideVideoAction(_prev: ActionState | null, form: FormData): Promise<ActionState> {
+  await requireOwner();
+  const id = Number(str(form, "id")), decision = str(form, "decision"), note = str(form, "note").slice(0, 500) || null;
+  if (!Number.isSafeInteger(id) || id < 1 || !["approved", "rejected", "retry"].includes(decision)) return { ok: false, message: "That request wasn't valid." };
+  const [v] = await q<{ cu_id: string; status: string; claims: { key: string; hash: string }[] }>(`SELECT cu_id, status, claims FROM videos WHERE id = $1`, [id]);
+  if (!v) return { ok: false, message: "Video not found." };
+  if (decision === "retry") {
+    if (v.status !== "failed") return { ok: false, message: "Only a failed video can be tried again." };
+    await q(`UPDATE videos SET status = 'queued', error = NULL WHERE id = $1`, [id]);
+  } else {
+    if (v.status !== "ready" && !(decision === "rejected" && ["queued", "failed"].includes(v.status))) {
+      return { ok: false, message: "This video can't be decided right now." };
+    }
+    if (decision === "approved") {
+      // The numbers must still be ONCU's current ones, not just approved at the time.
+      const s = await getCuStory(v.cu_id);
+      const current = new Map([...(s?.story.chapters ?? []), ...(s?.story.trends ?? []), ...(s?.story.pains ?? [])].map((c) => [c.key, c.hash]));
+      if (v.claims.some((c) => current.get(c.key) !== c.hash)) {
+        return { ok: false, message: "ONCU's numbers changed since this video was made. Review the statements and make a new video." };
+      }
+    }
+    try {
+      await q(`UPDATE videos SET status = $2, decided_by = $3, decided_at = now(), decision_note = $4 WHERE id = $1`, [id, decision, OWNER_NAME, note]);
+    } catch (err) {
+      return { ok: false, message: (err as Error).message.includes("no longer approved") ? "A statement in this video is no longer approved. Make a new video." : "Couldn't save that decision." };
+    }
+  }
+  revalidatePath("/videos");
+  revalidatePath(`/credit-unions/${v.cu_id}`);
+  return { ok: true, message: decision === "approved" ? "Video approved. It's ready to download." : decision === "retry" ? "Queued again." : "Video declined." };
 }

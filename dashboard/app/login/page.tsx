@@ -8,9 +8,9 @@ export default async function LoginPage() {
   if (await isOwner()) redirect("/");
   return (
     <section className="login rise">
-      <span className="login-mark" aria-hidden="true">N</span>
+      <img src="/brand/trisanga-mark.png" alt="" width={64} height={64} className="login-logo" />
       <h1>Welcome back</h1>
-      <p className="muted">Sign in to see what your AI team did and approve their work.</p>
+      <p className="muted">Sign in to the Trisanga Story Studio: credit union stories from ONCU Insights.</p>
       <LoginForm />
     </section>
   );

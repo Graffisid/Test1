@@ -1,58 +1,62 @@
-/* Northshore Growth Desk — calm, minimal, one accent. Light and dark both designed. All motion is CSS/SVG
-   and switches off under prefers-reduced-motion. No inline styles anywhere (the CSP forbids them). */
-/* Design tokens follow ONCU Insights: calm teal brand, warm gold accent, Hanken Grotesk + Sora for numbers.
-   Chart series colours were validated for colour-blind separation and contrast (dataviz validator), per mode. */
+/* Trisanga Story Studio — the Trisanga website's look: ivory paper, deep teal, burgundy accent, Playfair Display
+   headlines with Plus Jakarta Sans text. No inline styles anywhere (the CSP forbids them). Motion is CSS/SVG and
+   switches off under prefers-reduced-motion. Chart colours: teal and gold from the brand's value colours. */
 :root {
   color-scheme: light;
-  --page: #f3f6f4;
-  --surface: #ffffff;
-  --surface-2: #eef3f0;
-  --sunken: #e9efec;
-  --ink: #131820;
-  --ink-2: #4a515d;
-  --muted: #666d79;
-  --hairline: #dfe6e2;
-  --accent: #0e7c86;
-  --accent-2: #0b5f67;
-  --accent-soft: #e3f2f2;
+  --page: #f5f2eb;
+  --surface: #fffefb;
+  --surface-2: #eae6dd;
+  --sunken: #e4dfd4;
+  --ink: #272d2b;
+  --ink-2: #444c48;
+  --muted: #565f5b;
+  --hairline: #d8d7cd;
+  --accent: #822a40;
+  --accent-2: #6f2236;
+  --accent-soft: #f3e4e7;
   --accent-ink: #ffffff;
-  --gold: #e0a43a;
-  --good: #1b7a55;
-  --good-soft: #dcf3e8;
-  --bad: #b0383f;
-  --bad-soft: #fbdde2;
-  --warn: #94430f;
-  --warn-soft: #fbf0cf;
-  --series-1: #0097a7;
-  --series-2: #c27c0e;
-  --grid: #e6e3da;
-  --shadow: 0 1px 2px rgba(15, 47, 58, 0.06), 0 8px 24px rgba(15, 47, 58, 0.06);
-  --shadow-lift: 0 2px 6px rgba(15, 47, 58, 0.08), 0 18px 40px rgba(15, 47, 58, 0.12);
+  --teal: #173f3c;
+  --gold: #e3b04f;
+  --v-cur: #8a5a00; --v-cre: #a3243b; --v-col: #0f5f5a;
+  --good: #1f6b4a;
+  --good-soft: #dcefe4;
+  --bad: #a3243b;
+  --bad-soft: #f6dde1;
+  --warn: #8a5a00;
+  --warn-soft: #f6ead0;
+  --series-1: #0f5f5a;
+  --series-2: #b07a12;
+  --grid: #e3dfd5;
+  --shadow: 0 1px 2px rgba(16, 47, 47, 0.06), 0 10px 30px rgba(16, 47, 47, 0.07);
+  --shadow-lift: 0 2px 6px rgba(16, 47, 47, 0.08), 0 18px 40px rgba(16, 47, 47, 0.12);
   --radius: 20px;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font: var(--font-sans, ui-sans-serif), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-num: var(--font-display, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+  --font-num: var(--font-sans, ui-sans-serif), ui-sans-serif, system-ui, sans-serif;
+  --font-head: var(--font-display, Georgia), Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --page: #0b1014; --surface: #141a21; --surface-2: #1a222b; --sunken: #090d11;
-    --ink: #eef1f5; --ink-2: #c3c9d2; --muted: #9098a5; --hairline: #232c36;
-    --accent: #5cc6cf; --accent-2: #8fdbe1; --accent-soft: #10292d; --accent-ink: #0b1014; --gold: #f0c46a;
-    --good: #6fd3a6; --good-soft: #0f2a20; --bad: #ff9aa0; --bad-soft: #2f1418; --warn: #f0c46a; --warn-soft: #2a2110;
-    --series-1: #11a0ad; --series-2: #b5801a; --grid: #222933;
+    --page: #0b2424; --surface: #102f2f; --surface-2: #173f3c; --sunken: #082020;
+    --ink: #f5f2eb; --ink-2: #dbe4df; --muted: #b7c7bf; --hairline: #24504b;
+    --accent: #dfc09a; --accent-2: #f0d6b4; --accent-soft: #2a3b33; --accent-ink: #102f2f; --teal: #4fb5ad; --gold: #ffd60a;
+    --v-cur: #ffd60a; --v-cre: #ff6b5e; --v-col: #4fb5ad;
+    --good: #7fd6b0; --good-soft: #12382e; --bad: #ff9aa0; --bad-soft: #3a1820; --warn: #f0c46a; --warn-soft: #33290f;
+    --series-1: #4fb5ad; --series-2: #d9a441; --grid: #1d4542;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3);
     --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 40px rgba(0, 0, 0, 0.45);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #0b1014; --surface: #141a21; --surface-2: #1a222b; --sunken: #090d11;
-  --ink: #eef1f5; --ink-2: #c3c9d2; --muted: #9098a5; --hairline: #232c36;
-  --accent: #5cc6cf; --accent-2: #8fdbe1; --accent-soft: #10292d; --accent-ink: #0b1014; --gold: #f0c46a;
-  --good: #6fd3a6; --good-soft: #0f2a20; --bad: #ff9aa0; --bad-soft: #2f1418; --warn: #f0c46a; --warn-soft: #2a2110;
-  --series-1: #11a0ad; --series-2: #b5801a; --grid: #222933;
+  --page: #0b2424; --surface: #102f2f; --surface-2: #173f3c; --sunken: #082020;
+  --ink: #f5f2eb; --ink-2: #dbe4df; --muted: #b7c7bf; --hairline: #24504b;
+  --accent: #dfc09a; --accent-2: #f0d6b4; --accent-soft: #2a3b33; --accent-ink: #102f2f; --teal: #4fb5ad; --gold: #ffd60a;
+  --v-cur: #ffd60a; --v-cre: #ff6b5e; --v-col: #4fb5ad;
+  --good: #7fd6b0; --good-soft: #12382e; --bad: #ff9aa0; --bad-soft: #3a1820; --warn: #f0c46a; --warn-soft: #33290f;
+  --series-1: #4fb5ad; --series-2: #d9a441; --grid: #1d4542;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3);
   --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.4), 0 18px 40px rgba(0, 0, 0, 0.45);
 }
@@ -607,7 +611,7 @@ main.solo { max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px; }
   background: var(--surface); border-right: 1px solid var(--hairline);
 }
 .sidebar .brand { padding: 4px 8px 10px; }
-.brand strong { font-family: var(--font-num); letter-spacing: -0.01em; }
+.brand strong { font-family: var(--font-head); letter-spacing: 0.08em; color: var(--teal); }
 .logo, .login-mark { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
 .side-nav { display: grid; gap: 2px; }
 .side-nav a {
@@ -649,7 +653,8 @@ main.solo { max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px; }
 /* ========================================================================== page head + cards === */
 .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.72rem; font-weight: 650; color: var(--muted); margin-bottom: 6px; }
 .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
-.page-head h1 { font-family: var(--font-num); font-size: clamp(1.7rem, 3vw, 2.5rem); font-weight: 600; letter-spacing: -0.02em; }
+.page-head h1 { font-family: var(--font-head); font-size: clamp(1.8rem, 3.2vw, 2.7rem); font-weight: 400; letter-spacing: -0.02em; }
+.page-head h1 em { color: var(--accent); }
 .page-sub { margin-top: 8px; color: var(--ink-2); font-size: 1.02rem; max-width: 52em; }
 .page-sub strong { color: var(--ink); }
 .attention { display: inline-flex; align-items: center; gap: 9px; padding: 10px 16px 10px 10px; border-radius: 999px; text-decoration: none;
@@ -659,7 +664,7 @@ main.solo { max-width: 1180px; margin: 0 auto; padding: 32px 28px 64px; }
 .attention-n { min-width: 30px; height: 30px; padding: 0 9px; border-radius: 999px; display: grid; place-items: center; background: var(--gold); color: #1d1405; font-family: var(--font-num); }
 .card { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px; min-width: 0; }
 .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-.card-head h2 { font-size: 1.12rem; font-weight: 650; }
+.card-head h2 { font-family: var(--font-head); font-size: 1.3rem; font-weight: 400; letter-spacing: -0.01em; }
 .card-head h2 .num { font-family: var(--font-num); }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 @media (max-width: 1100px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -1202,3 +1207,32 @@ form.busy { opacity: 0.7; }
 .map-form select { width: auto; min-width: 170px; }
 .map-table td { vertical-align: middle; }
 .steps-list { display: grid; gap: 8px; padding-left: 20px; max-width: 80ch; }
+
+/* Trisanga brand lockup */
+.logo-img { width: 40px; height: 40px; flex: none; }
+.brand-values { font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+.v-cur { color: var(--v-cur); } .v-cre { color: var(--v-cre); } .v-col { color: var(--v-col); }
+.login-logo { width: 64px; height: 64px; display: block; }
+
+/* video studio */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; margin-top: 16px; }
+.video-card { display: grid; gap: 12px; align-content: start; }
+.video-card h3 { font-size: 1rem; font-weight: 650; }
+.video-card .eyebrow a { color: inherit; }
+.player, .player-placeholder { width: 100%; border-radius: 14px; background: #04272d; display: block; }
+.fmt-vertical .player, .fmt-vertical .player-placeholder { aspect-ratio: 9 / 16; max-height: 560px; margin: 0 auto; }
+.fmt-wide .player, .fmt-wide .player-placeholder { aspect-ratio: 16 / 9; }
+.player-placeholder { display: grid; place-content: center; justify-items: center; gap: 8px; color: #c3d2c9; }
+.player-placeholder .icon { width: 2em; height: 2em; }
+.scene-list { display: grid; gap: 8px; margin-top: 10px; }
+.video-actions { flex-wrap: wrap; }
+.bad-text { color: var(--bad); }
+.ready-list { display: grid; gap: 8px; }
+.ready-list li { display: flex; gap: 8px; align-items: center; color: var(--ink-2); }
+.ready-list li .icon { color: var(--warn); }
+.ready-list li.ok .icon { color: var(--good); }
+.sidebar .brand { min-width: 0; }
+.brand > span:last-child { min-width: 0; }
+.brand-values { font-size: 0.6rem; letter-spacing: 0; }
+.me { min-width: 0; }
+.me-name .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -10,7 +10,8 @@
  *   3. Writes those connection strings and a random owner password to .sandbox/ (gitignored, chmod 600).
  *   4. Sets the owner's (fictional) WhatsApp number — the only number that can approve from a phone.
  *   5. Imports ONCU Insights (read-only) from ONCU_DATA_DIR, or ../oncu-app/oncu/data next to this repo.
- *   6. Starts the dashboard (:3000). The retired Northshore services start only with --northshore.
+ *   6. Starts the dashboard (:3000) and the video render worker (files in .videos/, owner-only).
+ *      The retired Northshore services start only with --northshore.
  *
  * Nothing is sent to any credit union and no paid service is called. Ctrl-C stops it all.
  */
@@ -55,7 +56,7 @@ if (!keep) {
 }
 
 // 2. Logins (fresh random passwords each start)
-const services = ["dashboard", "oncu", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
+const services = ["dashboard", "oncu", "video", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
 const urls: Record<string, string> = {};
 for (const s of services) {
   const pw = secret();
@@ -96,6 +97,8 @@ const env: Record<string, string> = {
   QUALIFIER_DATABASE_URL: urls.qualifier,
   ONCU_SYNC_DATABASE_URL: urls.oncu,
   ONCU_DATA_DIR: oncuDir,
+  VIDEO_DATABASE_URL: urls.video,
+  VIDEO_DIR: join(ROOT, ".videos"),
   VOICE_DATABASE_URL: urls.voice,
   NOTIFIER_DATABASE_URL: urls.notifier,
   META_APP_SECRET: secret(),
@@ -161,6 +164,8 @@ const stop = (code = 0) => {
 process.on("SIGINT", () => stop());
 process.on("SIGTERM", () => stop());
 
+mkdirSync(join(ROOT, ".videos"), { recursive: true, mode: 0o700 });
+start("video", tsx("workflows/video-worker.ts"), {});
 if (northshore) {
   start("receiver", tsx("src/api/start.ts"), {});
   start("dispatcher", tsx("workflows/voice-dispatcher.ts"), {});
@@ -173,6 +178,7 @@ start("dashboard", [join(ROOT, "dashboard/node_modules/next/dist/bin/next"), "st
   DASHBOARD_PASSWORD: ownerPassword,
   SESSION_SECRET: secret(48),
   OWNER_NAME: "Trisanga owner (sandbox)",
+  VIDEO_DIR: join(ROOT, ".videos"),
 }, join(ROOT, "dashboard"));
 
 const ready = async (url: string) => {

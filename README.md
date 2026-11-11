@@ -1,8 +1,9 @@
 # Trisanga Story Studio
 
-Trisanga's third pillar, **collaboration and education**. The studio reads each Ontario credit union's history from
+Part of Trisanga's **Learning** pillar (young leaders and co-operative development), next to Consulting and Digital
+Products (ONCU Insights), and built on its values: Curiosity · Creativity · Collaboration. The studio reads each Ontario credit union's history from
 **ONCU Insights**, turns it into a story told from the credit union's own audited numbers, and names what is in its
-way. Each pain point is matched to how Trisanga can help. Story videos for each credit union come next (Phase 2).
+way. Each pain point is matched to how Trisanga can help. Each credit union's story becomes a short branded video.
 
 **The rule:** nothing goes to a credit union without the owner's approval. A fact can only be used after the
 owner approves it, and that approval is tied to the exact numbers. If ONCU changes a figure, the approval no
@@ -13,7 +14,7 @@ longer applies and the statement waits for the owner again.
 | Phase | What | State |
 |---|---|---|
 | 1 | ONCU connector with import history, story and pain-point engine, owner approvals, editable offerings, new dashboard | Done |
-| 2 | Video studio: storyboard per credit union, MP4s rendered on this machine (no paid service), review and approval | Next |
+| 2 | Video studio: storyboards from approved statements, MP4s (9:16 and 16:9) rendered on this machine, video approval; Trisanga brand (logo, Playfair Display + Plus Jakarta Sans, ivory/teal/burgundy, light and dark) | Done |
 | 3 | Collaboration and education: sharing with a credit union (owner-approved), education library, weekly ONCU auto-sync, retire the remaining Northshore code | Later |
 
 ## Quick start
@@ -21,7 +22,9 @@ longer applies and the statement waits for the owner again.
 ```bash
 git clone https://github.com/Graffisid/oncu-app ../oncu-app   # ONCU Insights, next to this repo (read-only)
 npm install && (cd dashboard && npm install)
-npm run sandbox                                                # fresh local database, ONCU import, dashboard on :3000
+npm install --no-save playwright-core@1.56.1 && npx playwright install chromium   # for videos (free, local)
+brew install ffmpeg                                            # for videos (macOS; any ffmpeg with libx264 works)
+npm run sandbox                                                # fresh local database, ONCU import, dashboard on :3000, video worker
 ```
 
 Sign in at <http://127.0.0.1:3000> with the password the sandbox prints. After ONCU's Monday run, pull the
@@ -44,12 +47,23 @@ Sign in at <http://127.0.0.1:3000> with the password the sandbox prints. After O
 - **Approvals.** Approve, set aside or withdraw each statement. Decisions are append-only and pinned to a hash of
   the numbers.
 
+- **Video studio (`dashboard/lib/storyboard.ts`, `src/video/render.ts`, `workflows/video-worker.ts`).** "Make video"
+  freezes a storyboard from the approved statements only: opening, the years with an assets chart, whole-period
+  trends, up to three pain points each followed by how Trisanga helps (the owner's offering wording), and a close
+  with the sources line. The render worker draws each frame in a headless browser with the Trisanga fonts and glass
+  logo embedded, and ffmpeg encodes an H.264 MP4 (1080×1920 or 1920×1080, about 75 seconds, about 2 minutes to render).
+  No paid service, no network. Files stay in `.videos/` (owner-only). The database refuses a video built on an
+  unapproved statement, and refuses to approve one whose statements were withdrawn; the dashboard also refuses if
+  ONCU's numbers changed since. Download is possible only after approval.
+  Playwright is loaded if present (`playwright-core`, `playwright`, or `PLAYWRIGHT_MODULE`); ffmpeg from `PATH` or `FFMPEG_PATH`.
+
 ### Dashboard
 
 - **Overview:** roster, story-ready credit unions, pain points by offering, what to review next, the last ONCU import.
 - **Credit unions:** all 48, with search and filters by pain point.
-- **A credit union:** audited charts, pain points with the Trisanga answer, the year-by-year story, ONCU context (not
+- **A credit union:** a "Story video" panel (what still needs approving, Make vertical / wide, its videos), audited charts, pain points with the Trisanga answer, the year-by-year story, ONCU context (not
   used in videos), and its import history.
+- **Videos:** every video with its player, storyboard, status, Approve / Decline, and Download once approved.
 - **Offerings:** edit what Trisanga offers and which pain point each one answers.
 - **ONCU data:** every import, with its ONCU commit.
 

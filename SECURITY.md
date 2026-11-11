@@ -64,7 +64,9 @@ either closed and tested, or written down below with its mitigation.
 | Rewriting the past | Imported rows and approvals are append-only for every role, the app's included. | same |
 | Writing back to ONCU | The connector only reads files; it has no ONCU credentials and no write path. | code review |
 | An unapproved or stale fact reaching a video | Statements are built only from audited/official numbers; approvals are pinned to a hash of the exact figures, recomputed on the server (the browser never sends text or hashes). | same |
-| Over-broad access | `oncu_sync_app` can only add imported data; `dashboard_app` can only edit offering wording/mapping and add approvals; other services cannot read ONCU data. | same |
+| A video saying something unapproved | The storyboard is built only from approved statements, frozen at request, and drawn verbatim; the database refuses unapproved or withdrawn statements (migration 024). | `tests/phase10-video-studio.test.ts` |
+| Video files leaking | Files stay in `.videos/` (mode 700); served only to the signed-in owner by database file name (never a path from the request); download only after approval. The renderer loads no network resources. | same + browser test |
+| Over-broad access | `video_app` can only claim queued videos and record results; `oncu_sync_app` can only add imported data; `dashboard_app` can only edit offering wording/mapping and add approvals; other services cannot read ONCU data. | same |
 
 ## Running securely
 

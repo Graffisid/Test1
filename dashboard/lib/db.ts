@@ -58,4 +58,4 @@ export async function q<T extends QueryResultRow>(sql: string, params: unknown[]
 }
 
 /** The owner's display name, used when recording decisions. */
-export const OWNER_NAME = process.env.OWNER_NAME || "Dana Reyes";
+export const OWNER_NAME = process.env.OWNER_NAME || "Trisanga owner";

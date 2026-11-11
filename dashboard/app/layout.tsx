@@ -6,14 +6,16 @@ import { Icon } from "@/components/Icon";
 import { SideNav } from "@/components/SideNav";
 import { Toaster } from "@/components/Toaster";
 import { OWNER_NAME } from "@/lib/db";
-import { getWaitingCount } from "@/lib/oncu";
+import { getVideoReviewCount, getWaitingCount } from "@/lib/oncu";
 import { isOwner } from "@/lib/session";
 import { logoutAction } from "./auth-actions";
 import "./globals.css";
 
-// ONCU's type pairing, bundled with the app (SIL Open Font License; see app/fonts/LICENSE.txt). No font requests leave the app.
-const sans = localFont({ src: "./fonts/HankenGrotesk-latin.woff2", weight: "300 800", variable: "--font-sans", display: "swap" });
-const display = localFont({ src: "./fonts/Sora-latin.woff2", weight: "400 700", variable: "--font-display", display: "swap" });
+// Trisanga's type pairing from its website design, bundled with the app (SIL Open Font License; see app/fonts/LICENSE.txt).
+const sans = localFont({ src: "./fonts/PlusJakartaSans-latin.woff2", weight: "400 700", variable: "--font-sans", display: "swap" });
+const display = localFont({
+  src: [{ path: "./fonts/PlayfairDisplay-latin.woff2", style: "normal" }, { path: "./fonts/PlayfairDisplay-italic-latin.woff2", style: "italic" }],
+  weight: "400 700", variable: "--font-display", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Trisanga Story Studio",
@@ -23,7 +25,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   await headers(); // every page renders per request, so each gets its own CSP nonce
   const authed = await isOwner();
-  const pending = authed ? await getWaitingCount() : 0;
+  const [pending, videos] = authed ? await Promise.all([getWaitingCount(), getVideoReviewCount()]) : [0, 0];
   const shownName = OWNER_NAME;
   const initials = shownName.split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
@@ -34,10 +36,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <div className="app">
             <aside className="sidebar">
               <Link href="/" className="brand">
-                <span className="logo" aria-hidden="true">T</span>
-                <span><strong>Trisanga</strong><span className="brand-sub">Story Studio</span></span>
+                <img src="/brand/trisanga-mark.png" alt="" width={40} height={40} className="logo-img" />
+                <span><strong>TRISANGA</strong><span className="brand-sub brand-values"><span className="v-cur">Curiosity</span> · <span className="v-cre">Creativity</span> · <span className="v-col">Collaboration</span></span></span>
               </Link>
-              <SideNav pending={pending} />
+              <SideNav pending={pending} videos={videos} />
               <div className="side-foot">
                 <span className="sandbox" role="note" title="Local mode: ONCU data is read on this machine. Nothing is sent to any credit union.">
                   <span className="sandbox-dot" aria-hidden="true" />

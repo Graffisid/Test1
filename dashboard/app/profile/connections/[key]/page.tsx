@@ -28,7 +28,7 @@ export default async function Connect({ params }: { params: Promise<{ key: strin
         </header>
         <p className="practice-badge">Practice sign-in · sandbox</p>
         <h1>{info.signIn}</h1>
-        <p className="muted"><strong>Northshore Growth Desk</strong> wants to connect to your {info.provider} account{item.connected ? " (already connected — this replaces it)" : ""}.</p>
+        <p className="muted"><strong>Trisanga Story Studio</strong> wants to connect to your {info.provider} account{item.connected ? " (already connected — this replaces it)" : ""}.</p>
         <ActionForm action={connectAction} className="consent-form">
           <input type="hidden" name="key" value={key} />
           <label className="field"><span>{info.provider} account or page to connect</span>

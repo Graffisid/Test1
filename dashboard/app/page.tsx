@@ -23,7 +23,7 @@ export default async function Overview() {
     <>
       <header className="page-head rise">
         <div>
-          <p className="eyebrow">Collaboration &amp; education</p>
+          <p className="eyebrow">Learning · Collaboration &amp; education</p>
           <h1>Every Ontario credit union&apos;s story, told from its own numbers</h1>
           <p className="page-sub">ONCU Insights supplies the audited history. Trisanga turns it into a story each credit union recognises, names
             what&apos;s in the way, and shows how we can help. Nothing reaches a credit union without your approval.</p>

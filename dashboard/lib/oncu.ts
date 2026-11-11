@@ -95,3 +95,21 @@ export async function getFacts(cuId: string, importId: number) {
 export async function getWaitingCount(): Promise<number> {
   return (await getPortfolio()).reduce((n, c) => n + c.waiting, 0);
 }
+
+export interface VideoRow {
+  id: number; cu_id: string; cu_name: string; format: "vertical" | "wide"; status: string; storyboard: import("./storyboard").Storyboard;
+  claims: { key: string; hash: string }[]; requested_by: string; requested_at: string; rendered_at: string | null; file_name: string | null;
+  file_bytes: number | null; duration_s: number | null; error: string | null; decided_by: string | null; decided_at: string | null; decision_note: string | null;
+}
+
+export async function getVideos(cuId?: string): Promise<VideoRow[]> {
+  return q<VideoRow>(
+    `SELECT v.id, v.cu_id, c.name AS cu_name, v.format, v.status, v.storyboard, v.claims, v.requested_by, v.requested_at, v.rendered_at,
+            v.file_name, v.file_bytes, v.duration_s::float8 AS duration_s, v.error, v.decided_by, v.decided_at, v.decision_note
+     FROM videos v JOIN credit_unions c ON c.id = v.cu_id WHERE ($1::text IS NULL OR v.cu_id = $1) ORDER BY v.requested_at DESC LIMIT 200`, [cuId ?? null]);
+}
+
+export async function getVideoReviewCount(): Promise<number> {
+  const [r] = await q<{ n: number }>(`SELECT count(*)::int AS n FROM videos WHERE status = 'ready'`);
+  return r?.n ?? 0;
+}

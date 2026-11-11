@@ -5,10 +5,13 @@ import { CuMark } from "@/components/CuMark";
 import { Icon } from "@/components/Icon";
 import { YearBars } from "@/components/charts/YearBars";
 import { requireOwnerPage } from "@/lib/session";
-import { getCuStory, getFacts, type ClaimState, type CuStory } from "@/lib/oncu";
+import { getCuStory, getFacts, getVideos, type ClaimState, type CuStory } from "@/lib/oncu";
+import { MAX_PAINS, MIN_CHAPTERS, readiness } from "@/lib/storyboard";
+import { AutoRefresh } from "@/components/AutoRefresh";
+import { VideoCard } from "@/components/VideoCard";
 import { display, label } from "@/lib/numbers";
 import type { Claim, PainPoint } from "@/lib/story";
-import { approveAllAction, decideClaimAction } from "../../trisanga-actions";
+import { approveAllAction, decideClaimAction, requestVideoAction } from "../../trisanga-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +88,9 @@ export default async function CuStoryPage({ params }: { params: Promise<{ id: st
   const s = await getCuStory(id);
   if (!s) notFound();
   const { cu, story } = s;
-  const facts = await getFacts(cu.id, cu.last_import_id);
+  const [facts, videos] = await Promise.all([getFacts(cu.id, cu.last_import_id), getVideos(cu.id)]);
+  const ready = readiness({ story, approved: (c) => s.state(c) === "approved" });
+  const busy = videos.some((v) => v.status === "queued" || v.status === "rendering");
   const offering = new Map(s.offerings.map((o) => [o.key, o]));
   const all = [...story.chapters, ...story.trends, ...story.pains];
   const approved = all.filter((c) => s.state(c) === "approved").length;
@@ -129,6 +134,32 @@ export default async function CuStoryPage({ params }: { params: Promise<{ id: st
             <p className="muted">ONCU has {story.years.length ? `numbers for ${story.years.map((y) => `FY${y}`).join(", ")}` : "no audited numbers"} for {cu.short_name}.
               A story needs at least three years. It will appear here automatically when a weekly ONCU run captures more.</p></div>
         </div>
+      )}
+
+      <AutoRefresh active={busy} />
+      {story.enough && (
+        <section className="card rise" aria-labelledby="vid-h">
+          <header className="card-head">
+            <div><p className="eyebrow">Story video</p><h2 id="vid-h">{cu.short_name}&apos;s story, as a <em>video</em></h2></div>
+            <div className="claim-actions">
+              {(["vertical", "wide"] as const).map((f) => (
+                <ActionForm key={f} action={requestVideoAction}>
+                  <input type="hidden" name="cu_id" value={cu.id} /><input type="hidden" name="format" value={f} />
+                  <button type="submit" className={`btn small ${f === "vertical" ? "primary" : ""}`} disabled={!ready.ready}>
+                    <Icon name="film" /> Make {f === "vertical" ? "vertical 9:16" : "wide 16:9"}</button>
+                </ActionForm>
+              ))}
+            </div>
+          </header>
+          <ul className="plain ready-list">
+            <li className={ready.approvedChapters >= MIN_CHAPTERS ? "ok" : ""}><Icon name={ready.approvedChapters >= MIN_CHAPTERS ? "check" : "clock"} />
+              {ready.approvedChapters} year{ready.approvedChapters === 1 ? "" : "s"} of the story approved <span className="muted small">(at least {MIN_CHAPTERS})</span></li>
+            <li className={ready.approvedPains ? "ok" : ""}><Icon name={ready.approvedPains ? "check" : "clock"} />
+              {ready.approvedPains} pain point{ready.approvedPains === 1 ? "" : "s"} approved <span className="muted small">(at least 1; up to {MAX_PAINS} are used)</span></li>
+            <li className="ok"><Icon name="info" /> Only approved statements appear, word for word. Rendered on this machine; nothing is sent anywhere.</li>
+          </ul>
+          {videos.length > 0 && <div className="video-grid">{videos.map((v) => <VideoCard key={v.id} v={v} showCu={false} />)}</div>}
+        </section>
       )}
 
       {(story.series.assets || story.series.netIncome) && (

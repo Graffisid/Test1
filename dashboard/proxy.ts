@@ -8,7 +8,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, allowedHosts, authConfig, verifySession } from "./lib/auth";
 
-const PUBLIC_PATHS = new Set(["/login"]);
+// The logo is public so the sign-in page can show it; nothing else is reachable before sign-in.
+const PUBLIC_PATHS = new Set(["/login", "/brand/trisanga-mark.png"]);
 
 function securityHeaders(res: NextResponse, csp: string | null, https: boolean) {
   if (csp) res.headers.set("Content-Security-Policy", csp);

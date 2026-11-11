@@ -126,3 +126,18 @@ that the mock spend stays under them.
 
 Dates are relative to the moment you run the seed. Re-running it truncates
 and reloads.
+
+## Trisanga: ONCU Insights and stories (migration 023)
+
+| Table | What it holds | Who writes |
+|---|---|---|
+| `oncu_imports` | One row per ONCU sync: ONCU commit, content hash (unique), counts | `oncu_sync_app` (insert only) |
+| `credit_unions` | Current profile of each credit union (the only row a sync updates in place) | `oncu_sync_app` |
+| `cu_metric_values` | Audited/official numbers by year **per import** (history) with ONCU classification and source ids | `oncu_sync_app` (insert only) |
+| `cu_sources` | ONCU source list per import | `oncu_sync_app` (insert only) |
+| `cu_facts` | ONCU evidence records per import, with ONCU's own type, verification and approval labels | `oncu_sync_app` (insert only) |
+| `offerings` | What Trisanga offers (draft wording the owner edits) | `dashboard_app` (wording and on/off only) |
+| `pain_rules` | The seven pain-point rules and the offering that answers each | `dashboard_app` (mapping and on/off only) |
+| `claim_approvals` | Owner decisions on story statements, pinned to a SHA-256 of the exact numbers | `dashboard_app` (insert only) |
+
+Import history and approvals are append-only for every role (triggers). An agent name can never be recorded as the decider.

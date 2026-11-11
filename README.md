@@ -1,4 +1,67 @@
-# AI Social Media Team
+# Trisanga Story Studio
+
+Trisanga's third pillar, **collaboration and education**. The studio reads each Ontario credit union's history from
+**ONCU Insights**, turns it into a story told from the credit union's own audited numbers, and names what is in its
+way. Each pain point is matched to how Trisanga can help. Story videos for each credit union come next (Phase 2).
+
+**The rule:** nothing goes to a credit union without the owner's approval. A fact can only be used after the
+owner approves it, and that approval is tied to the exact numbers. If ONCU changes a figure, the approval no
+longer applies and the statement waits for the owner again.
+
+## Phases
+
+| Phase | What | State |
+|---|---|---|
+| 1 | ONCU connector with import history, story and pain-point engine, owner approvals, editable offerings, new dashboard | Done |
+| 2 | Video studio: storyboard per credit union, MP4s rendered on this machine (no paid service), review and approval | Next |
+| 3 | Collaboration and education: sharing with a credit union (owner-approved), education library, weekly ONCU auto-sync, retire the remaining Northshore code | Later |
+
+## Quick start
+
+```bash
+git clone https://github.com/Graffisid/oncu-app ../oncu-app   # ONCU Insights, next to this repo (read-only)
+npm install && (cd dashboard && npm install)
+npm run sandbox                                                # fresh local database, ONCU import, dashboard on :3000
+```
+
+Sign in at <http://127.0.0.1:3000> with the password the sandbox prints. After ONCU's Monday run, pull the
+`oncu-app` repo and run `npm run oncu:sync` (it skips unchanged data). To read ONCU from somewhere else, set
+`ONCU_DATA_DIR` or pass `--dir <oncu-app>/oncu/data`.
+
+## How it works
+
+- **Connector (`src/oncu/connector.ts`, `workflows/oncu-sync.ts`).** Reads ONCU's `registry.json` and
+  `credit-unions/<slug>.json`, validates them, and records one **import**. Every value is stored against its
+  import, so past numbers stay readable next to today's. Nothing is written back to ONCU. It keeps only numbers ONCU
+  classifies as audited, official or calculated from those. A ratio is left out when that credit union's base
+  figures are unverified in ONCU. It runs as the `oncu_sync` login, which can only add imported data.
+- **Story engine (`dashboard/lib/story.ts`).** Builds year chapters, whole-period trends and pain points from those
+  numbers alone. Each statement lists the exact figures, ONCU's classification and the source documents. ONCU's
+  own interpretations, member and employee voice, and pending findings are shown as context, never as statements.
+- **Pain points.** Seven plain rules (earnings, costs, margin, funding, capital, growth, credit reserves), each
+  answered by a Trisanga offering. Offerings are a first draft for the owner to rewrite on the Offerings page,
+  where the rule-to-offering mapping is also set.
+- **Approvals.** Approve, set aside or withdraw each statement. Decisions are append-only and pinned to a hash of
+  the numbers.
+
+### Dashboard
+
+- **Overview:** roster, story-ready credit unions, pain points by offering, what to review next, the last ONCU import.
+- **Credit unions:** all 48, with search and filters by pain point.
+- **A credit union:** audited charts, pain points with the Trisanga answer, the year-by-year story, ONCU context (not
+  used in videos), and its import history.
+- **Offerings:** edit what Trisanga offers and which pain point each one answers.
+- **ONCU data:** every import, with its ONCU commit.
+
+---
+
+## Earlier build: Northshore (retired)
+
+The sections below describe the platform this studio was converted from, an AI social media team for a fictional
+plumber. Its dashboard screens are gone. The backend (approval law, least-privilege roles, audit log) is kept for
+reuse in Phases 2 and 3, and its tests still run. `npm run sandbox -- --northshore` starts its services.
+
+### AI Social Media Team (Northshore)
 
 A multi-agent marketing system for a local business. It covers:
 

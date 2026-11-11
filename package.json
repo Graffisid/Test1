@@ -33,7 +33,8 @@
     "market:analyze": "tsx workflows/content-studio.ts market",
     "content:create": "tsx workflows/content-studio.ts content",
     "whatsapp:notify": "tsx workflows/whatsapp-approvals.ts",
-    "db:set-owner-whatsapp": "tsx db/set-owner-whatsapp.ts"
+    "db:set-owner-whatsapp": "tsx db/set-owner-whatsapp.ts",
+    "oncu:sync": "tsx workflows/oncu-sync.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

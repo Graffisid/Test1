@@ -56,6 +56,16 @@ either closed and tested, or written down below with its mitigation.
 | Bad data in the owner profile | Column grants only; the database checks names, email, https-only website, phone format and lengths. | `tests/phase8-profile-connections.test.ts` |
 | Guardrail bypass (spending, calling, auto-replying) | Enforced in the database, not only in prompts: CASL consent trigger, human-only approval deciders, no agent replies to angry comments, unique idempotency keys. | `tests/phase1-system-of-record.test.ts` |
 
+### Trisanga Story Studio (migration 023)
+
+| Risk | Control | Proof |
+|---|---|---|
+| A bad or tampered ONCU file | Each file is size-limited and schema-validated; a file whose id doesn't match its name is refused; only `https`/`http` links are kept (e.g. `javascript:` is dropped). | `tests/phase9-trisanga-oncu.test.ts` |
+| Rewriting the past | Imported rows and approvals are append-only for every role, the app's included. | same |
+| Writing back to ONCU | The connector only reads files; it has no ONCU credentials and no write path. | code review |
+| An unapproved or stale fact reaching a video | Statements are built only from audited/official numbers; approvals are pinned to a hash of the exact figures, recomputed on the server (the browser never sends text or hashes). | same |
+| Over-broad access | `oncu_sync_app` can only add imported data; `dashboard_app` can only edit offering wording/mapping and add approvals; other services cannot read ONCU data. | same |
+
 ## Running securely
 
 ```bash

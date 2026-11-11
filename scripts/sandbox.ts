@@ -1,5 +1,5 @@
 /**
- * sandbox — starts the whole platform locally in mock mode, ready to click through.
+ * sandbox — starts the Trisanga Story Studio locally, with ONCU Insights data, ready to click through.
  *
  *   npm run sandbox            # resets the local DB to fresh seed data, then starts everything
  *   npm run sandbox -- --keep  # keeps the current data
@@ -9,10 +9,10 @@
  *   2. Creates every least-privilege login with a fresh random password (never the superuser).
  *   3. Writes those connection strings and a random owner password to .sandbox/ (gitignored, chmod 600).
  *   4. Sets the owner's (fictional) WhatsApp number — the only number that can approve from a phone.
- *   5. Starts the webhook receiver + capture form (:3001), the voice dispatcher, the agent loop (sorting,
- *      replies, texts, publishing), the demo "customer's phone" (:3002), and the dashboard (:3000).
+ *   5. Imports ONCU Insights (read-only) from ONCU_DATA_DIR, or ../oncu-app/oncu/data next to this repo.
+ *   6. Starts the dashboard (:3000). The retired Northshore services start only with --northshore.
  *
- * Everything external stays simulated: no Meta, no ad spend, no calls, no paid AI. Ctrl-C stops it all.
+ * Nothing is sent to any credit union and no paid service is called. Ctrl-C stops it all.
  */
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -25,6 +25,7 @@ import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 const ROOT = join(import.meta.dirname, "..");
 const DIR = join(ROOT, ".sandbox");
 const keep = process.argv.includes("--keep");
+const northshore = process.argv.includes("--northshore");
 // Next.js sends anonymous usage telemetry by default; the sandbox makes no outbound calls at all.
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 // On a Mac with Homebrew Postgres the database superuser is your own macOS user (there is no "postgres" role),
@@ -54,7 +55,7 @@ if (!keep) {
 }
 
 // 2. Logins (fresh random passwords each start)
-const services = ["dashboard", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
+const services = ["dashboard", "oncu", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
 const urls: Record<string, string> = {};
 for (const s of services) {
   const pw = secret();
@@ -69,6 +70,19 @@ for (const s of services) {
 const OWNER_WHATSAPP = "+19055550111";
 run("set owner WhatsApp", tsx("db/set-owner-whatsapp.ts"), { OWNER_WHATSAPP, OWNER_NAME: "Dana Reyes" });
 
+// ONCU Insights import, as the oncu_sync login (it can only add imported data).
+const oncuDir = process.env.ONCU_DATA_DIR || join(ROOT, "../oncu-app/oncu/data");
+let oncuNote = "";
+if (existsSync(join(oncuDir, "registry.json"))) {
+  const r = spawnSync(process.execPath, tsx("workflows/oncu-sync.ts").concat("--dir", oncuDir), {
+    cwd: ROOT, env: { ...process.env, ONCU_SYNC_DATABASE_URL: urls.oncu }, encoding: "utf8" });
+  oncuNote = (r.stdout || r.stderr || "").trim();
+  if (r.status !== 0) { console.error(oncuNote); process.exit(1); }
+} else {
+  oncuNote = `oncu:sync: no ONCU data at ${oncuDir}. Clone Graffisid/oncu-app next to this repo (or set ONCU_DATA_DIR), then run npm run oncu:sync.`;
+}
+console.log(oncuNote);
+
 // 3. Environment (gitignored, owner-only)
 const ownerPassword = secret(12);
 const env: Record<string, string> = {
@@ -80,6 +94,8 @@ const env: Record<string, string> = {
   MEDIA_DATABASE_URL: urls.media,
   SPEND_DATABASE_URL: urls.spend,
   QUALIFIER_DATABASE_URL: urls.qualifier,
+  ONCU_SYNC_DATABASE_URL: urls.oncu,
+  ONCU_DATA_DIR: oncuDir,
   VOICE_DATABASE_URL: urls.voice,
   NOTIFIER_DATABASE_URL: urls.notifier,
   META_APP_SECRET: secret(),
@@ -145,16 +161,18 @@ const stop = (code = 0) => {
 process.on("SIGINT", () => stop());
 process.on("SIGTERM", () => stop());
 
-start("receiver", tsx("src/api/start.ts"), {});
-start("dispatcher", tsx("workflows/voice-dispatcher.ts"), {});
-start("agents", tsx("workflows/agent-loop.ts"), {});
-start("phone-demo", tsx("src/demo/server.ts"), {});
+if (northshore) {
+  start("receiver", tsx("src/api/start.ts"), {});
+  start("dispatcher", tsx("workflows/voice-dispatcher.ts"), {});
+  start("agents", tsx("workflows/agent-loop.ts"), {});
+  start("phone-demo", tsx("src/demo/server.ts"), {});
+}
 start("dashboard", [join(ROOT, "dashboard/node_modules/next/dist/bin/next"), "start", "-H", "127.0.0.1", "-p", "3000"], {
   // The dashboard reads these ahead of dashboard/.env.local, so the sandbox never edits that file.
   DATABASE_URL: urls.dashboard,
   DASHBOARD_PASSWORD: ownerPassword,
   SESSION_SECRET: secret(48),
-  OWNER_NAME: "Dana Reyes (sandbox)",
+  OWNER_NAME: "Trisanga owner (sandbox)",
 }, join(ROOT, "dashboard"));
 
 const ready = async (url: string) => {
@@ -166,29 +184,21 @@ const ready = async (url: string) => {
   }
   return false;
 };
-if (!(await ready("http://127.0.0.1:3000/login")) || !(await ready("http://127.0.0.1:3001/healthz"))
-    || !(await ready("http://127.0.0.1:3002/"))) {
+if (!(await ready("http://127.0.0.1:3000/login"))
+    || (northshore && (!(await ready("http://127.0.0.1:3001/healthz")) || !(await ready("http://127.0.0.1:3002/"))))) {
   console.error("sandbox: services did not come up in 30 s.");
   stop(1);
 } else {
   console.log(`
 ──────────────────────────────────────────────────────────────────────
- Sandbox is running (mock mode: nothing real is sent, spent, or called)
+ Trisanga Story Studio is running (local: nothing is sent to any credit union)
 
  Dashboard   http://127.0.0.1:3000
  Password    ${ownerPassword}     (also in .sandbox/owner-password.txt)
 
- Customer's phone (for demos)   http://127.0.0.1:3002
- Your WhatsApp (for demos)      http://127.0.0.1:3002/owner
-   Content studio → "Analyse the market" → "Create posts": the best drafts arrive on your WhatsApp
-   with a one-time code. Approve or reject there (or in the dashboard).
-   Comment on the post, open the link in Northshore's reply, choose "Text me a quote",
-   then answer the texts. Approve the booking on the dashboard. Full script: dashboard → Demo.
-
- The AI team runs by itself every few seconds. To drive pieces by hand instead:
-   set -a; . .sandbox/sandbox.env; set +a
-   npm run simulate:meta                         # a burst of signed fake comments, DMs, a form, a review
-   npm run brain:write-ads -- "Furnace Tune-Up"  # then Approve a draft in the dashboard
+ ${oncuNote}
+ After ONCU's Monday run: pull the oncu-app repo, then
+   set -a; . .sandbox/sandbox.env; set +a; npm run oncu:sync
 
  Ctrl-C stops everything.
 ──────────────────────────────────────────────────────────────────────`);

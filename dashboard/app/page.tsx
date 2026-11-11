@@ -1,133 +1,98 @@
 import Link from "next/link";
+import { CuMark } from "@/components/CuMark";
 import { Icon } from "@/components/Icon";
-import { Funnel } from "@/components/charts/Funnel";
-import { Horseshoe } from "@/components/charts/Horseshoe";
-import { OverviewBoard, type KpiDef } from "@/components/charts/OverviewBoard";
-import { TrendProjection } from "@/components/charts/TrendProjection";
-import { fmt } from "@/components/charts/fmt";
 import { requireOwnerPage } from "@/lib/session";
-import { AGENT_LABEL, TZ, plainDecision, relative } from "@/lib/format";
-import { expireStaleApprovals, getActivity, getOverview, getPendingApprovals, getProfile } from "@/lib/queries";
+import { getImports, getOfferings, getPortfolio } from "@/lib/oncu";
+import { money } from "@/lib/story";
 
 export const dynamic = "force-dynamic";
 
 export default async function Overview() {
   await requireOwnerPage();
-  await expireStaleApprovals();
-  const [o, pending, activity, { profile }] = await Promise.all([getOverview(), getPendingApprovals(), getActivity({ limit: 6 }), getProfile()]);
-  const now = Date.now();
-  const hour = Number(new Date(now).toLocaleString("en-CA", { timeZone: TZ, hour: "numeric", hour12: false }));
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const today = new Date(now).toLocaleDateString("en-CA", { timeZone: TZ, weekday: "long", month: "long", day: "numeric", year: "numeric" });
-
-  const last = o.days.slice(0, 7), cur = o.days.slice(7);
-  const col = (rows: typeof cur, k: keyof (typeof cur)[number]) => rows.map((r) => Number(r[k]));
-  const tot = (rows: typeof cur, k: keyof (typeof cur)[number]) => col(rows, k).reduce((a, b) => a + b, 0);
-  const kpis: KpiDef[] = [
-    { key: "spend", label: "Ad spend", icon: "dollar", format: "money", goodWhen: "neither", thisWeek: col(cur, "spend"), lastWeek: col(last, "spend"),
-      help: "What your ads cost on Facebook and Instagram. Capped at $500 a week by the database." },
-    { key: "reach", label: "People reached", icon: "megaphone", format: "int", goodWhen: "up", thisWeek: col(cur, "reach"), lastWeek: col(last, "reach"),
-      help: "How many times your ads and posts were shown." },
-    { key: "enquiries", label: "Enquiries", icon: "inbox", format: "int", goodWhen: "up", thisWeek: col(cur, "enquiries"), lastWeek: col(last, "enquiries"),
-      help: "People who reached out: comments, messages and quote forms that became leads." },
-    { key: "callbacks", label: "Callbacks", icon: "phone", format: "int", goodWhen: "up", thisWeek: col(cur, "callbacks"), lastWeek: col(last, "callbacks"),
-      help: "Leads your phone assistant called back. The goal is within 60 seconds." },
-    { key: "booked", label: "Jobs booked", icon: "calendar", format: "int", goodWhen: "up", thisWeek: col(cur, "booked"), lastWeek: col(last, "booked"),
-      help: "Appointments put on your calendar." },
-    { key: "revenue", label: "Collected", icon: "chart", format: "money", goodWhen: "up", thisWeek: col(cur, "revenue"), lastWeek: col(last, "revenue"),
-      help: "Payments for finished jobs. Lags bookings by a few days." },
-  ];
-  const spend = tot(cur, "spend"), leads = tot(cur, "enquiries"), revenue = tot(cur, "revenue");
-  const mtd = o.monthToDate;
-  const monthPace = mtd.dayOfMonth > 1 ? (Number(mtd.revenue) / (mtd.dayOfMonth - 1)) * mtd.daysInMonth : null;
-  const speedPct = o.speed.calls ? o.speed.within60 / o.speed.calls : null;
+  const [cus, imports, offerings] = await Promise.all([getPortfolio(), getImports(), getOfferings()]);
+  const last = imports[0];
+  const ready = cus.filter((c) => c.enough);
+  const withPains = ready.filter((c) => c.pains.length);
+  const claims = ready.reduce((n, c) => n + c.claims, 0), approved = ready.reduce((n, c) => n + c.approved, 0);
+  const demand = offerings.map((o) => ({ o, cus: cus.filter((c) => c.pains.some((p) => p.offering_key === o.key)) }))
+    .filter((d) => d.cus.length).sort((a, b) => b.cus.length - a.cus.length);
+  const maxDemand = Math.max(...demand.map((d) => d.cus.length), 1);
+  const next = withPains.map((c) => ({ c, waiting: c.waiting })).sort((a, b) => b.c.pains.length - a.c.pains.length || a.c.name.localeCompare(b.c.name)).slice(0, 8);
 
   return (
     <>
       <header className="page-head rise">
         <div>
-          <p className="eyebrow">{today}</p>
-          <h1>{greeting}, {profile.display_name.split(" ")[0]}</h1>
-          <p className="page-sub">
-            Last 7 days: <strong>{fmt("money", spend)}</strong> of ads brought <strong>{leads} enquiries</strong> and{" "}
-            <strong>{fmt("money", revenue)}</strong> collected{speedPct !== null ? <> · <strong>{fmt("pct", speedPct)}</strong> called back within a minute</> : null}.
-          </p>
+          <p className="eyebrow">Collaboration &amp; education</p>
+          <h1>Every Ontario credit union&apos;s story, told from its own numbers</h1>
+          <p className="page-sub">ONCU Insights supplies the audited history. Trisanga turns it into a story each credit union recognises, names
+            what&apos;s in the way, and shows how we can help. Nothing reaches a credit union without your approval.</p>
         </div>
-        <Link href="/approvals" className={`attention ${pending.length ? "" : "clear"}`}>
-          {pending.length ? <><span className="attention-n">{pending.length}</span> need your OK <Icon name="arrowRight" /></>
-            : <><Icon name="check" /> All caught up</>}
-        </Link>
       </header>
 
-      <OverviewBoard kpis={kpis} thisDays={cur.map((d) => d.day)} lastDays={last.map((d) => d.day)} />
-
-      <div className="grid-2">
-        <section className="card rise" aria-labelledby="money-title">
-          <header className="card-head">
-            <div>
-              <p className="eyebrow">Money</p>
-              <h2 id="money-title">What you collected</h2>
-            </div>
-          </header>
-          <Horseshoe periods={o.periods.map((p) => ({ ...p, revenue: Number(p.revenue), spend: Number(p.spend), prevRevenue: Number(p.prevRevenue), prevSpend: Number(p.prevSpend) }))} />
-        </section>
-        <section className="card rise" aria-labelledby="funnel-title">
-          <header className="card-head">
-            <div>
-              <p className="eyebrow">Last 7 days vs the week before</p>
-              <h2 id="funnel-title">From reach to paid job</h2>
-            </div>
-            <ul className="legend plain" aria-label="Legend"><li><i className="sw s1" /> Last 7 days</li><li><i className="sw s2" /> Week before</li></ul>
-          </header>
-          <Funnel stages={[
-            { label: "People reached", cur: tot(cur, "reach"), prev: tot(last, "reach"), note: "ad and post views" },
-            { label: "Enquiries", cur: leads, prev: tot(last, "enquiries"), note: "comments, messages, forms" },
-            { label: "Called back", cur: tot(cur, "callbacks"), prev: tot(last, "callbacks"), note: "by your phone assistant" },
-            { label: "Jobs booked", cur: tot(cur, "booked"), prev: tot(last, "booked"), note: "on your calendar" },
-            { label: "Paid", cur: tot(cur, "paid"), prev: tot(last, "paid"), note: "jobs done and paid" },
-          ]} />
-        </section>
-      </div>
-
-      <section className="card chart-card rise" aria-labelledby="trend-title">
-        <header className="card-head">
-          <div>
-            <p className="eyebrow">Last 12 weeks + next 4 projected</p>
-            <h2 id="trend-title">Money collected per week</h2>
+      {!last ? (
+        <div className="card rise">
+          <h2>No ONCU data yet</h2>
+          <p className="muted">Run <code>npm run oncu:sync</code> with your ONCU Insights checkout next to this repository.</p>
+        </div>
+      ) : (
+        <>
+          <div className="kpis four">
+            <div className="kpi static"><span className="kpi-label">Credit unions</span><span className="kpi-value">{cus.length}</span>
+              <span className="kpi-prev">active Ontario roster from ONCU</span></div>
+            <div className="kpi static"><span className="kpi-label">Ready for a story</span><span className="kpi-value">{ready.length}</span>
+              <span className="kpi-prev">3+ years of audited numbers</span></div>
+            <div className="kpi static"><span className="kpi-label">Pain points found</span><span className="kpi-value">{withPains.reduce((n, c) => n + c.pains.length, 0)}</span>
+              <span className="kpi-prev">across {withPains.length} credit unions</span></div>
+            <div className="kpi static"><span className="kpi-label">Statements you approved</span><span className="kpi-value">{approved}<span className="kpi-of"> / {claims}</span></span>
+              <span className="kpi-prev">only approved ones can go in a video</span></div>
           </div>
-          <div className="head-stats">
-            <div><span className="muted small">This month so far</span><strong className="num">{fmt("money", Number(mtd.revenue))}</strong></div>
-            {monthPace !== null && <div><span className="muted small">On pace for</span><strong className="num">{fmt("money", monthPace)}</strong></div>}
-            <div><span className="muted small">Last month</span><strong className="num">{fmt("money", Number(mtd.lastMonth))}</strong></div>
-          </div>
-        </header>
-        <ul className="legend plain" aria-label="Legend"><li><i className="sw s1" /> Collected</li><li><i className="sw proj" /> Projected</li></ul>
-        <TrendProjection weeks={o.weeks.map((w) => ({ week: w.week, revenue: Number(w.revenue) }))} />
-      </section>
 
-      <div className="grid-2">
-        <section className="card rise" aria-labelledby="att-title">
-          <header className="card-head">
-            <h2 id="att-title">Needs your attention</h2>
-            <Link href="/approvals" className="btn small">Open all <span className="count">{pending.length}</span></Link>
-          </header>
-          {pending.length === 0 ? <p className="muted">Nothing waiting. New drafts and bookings will appear here.</p> : (
-            <ul className="plain mini-list">
-              {pending.slice(0, 4).map((a) => (
-                <li key={a.id}><Link href="/approvals"><strong>{a.title}</strong><span className="muted small">from {AGENT_LABEL[a.requested_by_agent] ?? a.requested_by_agent} · {relative(a.created_at, now)}</span></Link></li>
-              ))}
-            </ul>
-          )}
-        </section>
-        <section className="card rise" aria-labelledby="act-title">
-          <header className="card-head"><h2 id="act-title">Your team, just now</h2></header>
-          <ul className="plain mini-list">
-            {activity.map((a) => (
-              <li key={a.id}><div><strong>{AGENT_LABEL[a.agent] ?? a.agent}</strong><span className="small">{plainDecision(a.action, a.decision)}</span><span className="muted small">{relative(a.occurred_at, now)}</span></div></li>
-            ))}
-          </ul>
-        </section>
-      </div>
+          <div className="grid-2">
+            <section className="card rise" aria-labelledby="demand-h">
+              <header className="card-head"><div><p className="eyebrow">Where Trisanga can help</p><h2 id="demand-h">Pain points by offering</h2></div>
+                <Link href="/offerings" className="btn small">Edit offerings</Link></header>
+              <ul className="plain hbar-list">
+                {demand.map(({ o, cus: list }) => (
+                  <li key={o.key}>
+                    <div className="hb-head"><span>{o.title}</span><strong className="num">{list.length}</strong></div>
+                    <svg viewBox="0 0 100 8" preserveAspectRatio="none" className="hb" role="img" aria-label={`${o.title}: ${list.length} credit unions`}>
+                      <rect width="100" height="8" className="fn-track" /><rect width={(list.length / maxDemand) * 100} height="8" className="fn-bar s1" />
+                    </svg>
+                    <span className="muted small">{list.slice(0, 4).map((c) => c.short_name).join(", ")}{list.length > 4 ? ` and ${list.length - 4} more` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="card rise" aria-labelledby="next-h">
+              <header className="card-head"><div><p className="eyebrow">Next stories to review</p><h2 id="next-h">Credit unions with the clearest story</h2></div>
+                <Link href="/credit-unions?show=ready" className="btn small">See all</Link></header>
+              <ol className="plain cu-mini">
+                {next.map(({ c, waiting }) => (
+                  <li key={c.id}>
+                    <Link href={`/credit-unions/${c.id}`} className="cu-mini-row">
+                      <CuMark name={c.short_name} color={c.brand_primary} />
+                      <span className="cu-mini-main"><strong>{c.name}</strong>
+                        <span className="muted small">{c.latest_assets ? `${money(c.latest_assets)} assets · ` : ""}{c.pains.map((p) => p.title).join(" · ")}</span></span>
+                      <span className={`pill ${waiting ? "warn" : "good"}`}>{waiting ? `${waiting} to review` : "All reviewed"}</span>
+                      <Icon name="arrowRight" />
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <section className="card rise" aria-labelledby="src-h">
+            <header className="card-head"><div><p className="eyebrow">Source</p><h2 id="src-h">ONCU Insights</h2></div>
+              <Link href="/oncu" className="btn small">Import history</Link></header>
+            <p className="muted">Last import #{last.id} on {new Date(last.imported_at).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Toronto" })}
+              {last.source_commit ? ` from ONCU commit ${last.source_commit.slice(0, 7)}` : ""}: {last.cu_count} credit unions, {last.metric_count.toLocaleString("en-CA")} audited or official numbers,
+              {" "}{last.fact_count.toLocaleString("en-CA")} evidence records. ONCU is only read; nothing is written back to it.</p>
+          </section>
+        </>
+      )}
     </>
   );
 }

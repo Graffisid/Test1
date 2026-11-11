@@ -50,7 +50,7 @@ before(async () => {
   await migrate(testUrl.toString());
   admin = new pg.Client({ connectionString: testUrl.toString() });
   await admin.connect();
-  for (const role of ["dashboard_app", "video_app", "oncu_sync_app", "brain_app"]) {
+  for (const role of ["dashboard_app", "video_app", "oncu_sync_app", "mailer_app"]) {
     pools[role] = new pg.Pool({ connectionString: testUrl.toString(), options: `-c role=${role}`, max: 2 });
   }
   await as("oncu_sync_app", (c) => importSnapshot(c, readSnapshot(join(import.meta.dirname, "fixtures/oncu"))));
@@ -134,7 +134,7 @@ describe("database guard", () => {
     await assert.rejects(as("video_app", (x) => x.query(`SELECT * FROM claim_approvals`)), /permission denied/);
     await assert.rejects(as("video_app", (x) => x.query(`INSERT INTO videos (cu_id, format, storyboard, claims, import_id, requested_by) VALUES ('maplebrook','wide','{}','[]',1,'x')`)),
       /permission denied/);
-    await assert.rejects(as("brain_app", (x) => x.query(`SELECT * FROM videos`)), /permission denied/);
+    await assert.rejects(as("mailer_app", (x) => x.query(`SELECT * FROM videos`)), /permission denied/);
   });
 });
 

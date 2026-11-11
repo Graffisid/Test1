@@ -1,17 +1,17 @@
 /**
  * sandbox — starts the Trisanga Story Studio locally, with ONCU Insights data, ready to click through.
  *
- *   npm run sandbox            # resets the local DB to fresh seed data, then starts everything
- *   npm run sandbox -- --keep  # keeps the current data
+ *   npm run sandbox            # resets the local database, imports ONCU, then starts everything
+ *   npm run sandbox -- --keep  # keeps the current data (approvals, videos, contacts, messages)
  *
  * What it does:
  *   1. Refuses to run unless DATABASE_URL points at a local database (it can reset it).
- *   2. Creates every least-privilege login with a fresh random password (never the superuser).
+ *   2. Creates each least-privilege login with a fresh random password (never the superuser).
  *   3. Writes those connection strings and a random owner password to .sandbox/ (gitignored, chmod 600).
- *   4. Sets the owner's (fictional) WhatsApp number — the only number that can approve from a phone.
- *   5. Imports ONCU Insights (read-only) from ONCU_DATA_DIR, or ../oncu-app/oncu/data next to this repo.
- *   6. Starts the dashboard (:3000) and the video render worker (files in .videos/, owner-only).
- *      The retired Northshore services start only with --northshore.
+ *   4. Imports ONCU Insights (read-only): from the git checkout at ONCU_REPO_DIR (default ../oncu-app), reading its
+ *      committed main branch; or, if that isn't a git checkout, from the files in ONCU_DATA_DIR.
+ *   5. Starts the dashboard (:3000), the video render worker, the mailer (outbox only) and, with a git checkout,
+ *      the automatic ONCU sync (every 6 hours).
  *
  * Nothing is sent to any credit union and no paid service is called. Ctrl-C stops it all.
  */
@@ -26,8 +26,7 @@ import { assertLocalDatabase } from "../src/lib/db-guard.ts";
 const ROOT = join(import.meta.dirname, "..");
 const DIR = join(ROOT, ".sandbox");
 const keep = process.argv.includes("--keep");
-const northshore = process.argv.includes("--northshore");
-// Next.js sends anonymous usage telemetry by default; the sandbox makes no outbound calls at all.
+// Next.js sends anonymous usage telemetry by default; the sandbox makes no outbound calls of its own.
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 // On a Mac with Homebrew Postgres the database superuser is your own macOS user (there is no "postgres" role),
 // so a new Terminal window without DATABASE_URL still works. Elsewhere the usual default applies.
@@ -39,26 +38,27 @@ const adminUrl = databaseUrl();
 assertLocalDatabase(adminUrl, "sandbox");
 
 const secret = (n = 24) => randomBytes(n).toString("base64url");
-const run = (label: string, args: string[], env: NodeJS.ProcessEnv = {}, cwd = ROOT) => {
-  const r = spawnSync(process.execPath, args, { cwd, env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "inherit"] });
+const tsx = (file: string) => ["--import", "tsx", join(ROOT, file)];
+const run = (label: string, args: string[], env: NodeJS.ProcessEnv = {}): string => {
+  const r = spawnSync(process.execPath, args, { cwd: ROOT, env: { ...process.env, ...env }, encoding: "utf8" });
   if (r.status !== 0) {
-    console.error(`sandbox: ${label} failed.`);
+    console.error(`sandbox: ${label} failed.\n${(r.stderr || r.stdout || "").trim()}`);
     process.exit(1);
   }
+  return (r.stdout || "").trim();
 };
-const tsx = (file: string) => ["--import", "tsx", join(ROOT, file)];
 
-// 1. Data
+// 1. Database
 if (!keep) {
-  console.log("sandbox: resetting the local database to fresh seed data…");
+  console.log("sandbox: resetting the local database…");
   run("migrate --reset", tsx("db/migrate.ts").concat("--reset"));
-  run("seed", tsx("db/seed.ts"));
+} else {
+  run("migrate", tsx("db/migrate.ts"));
 }
 
 // 2. Logins (fresh random passwords each start)
-const services = ["dashboard", "oncu", "video", "ingest", "brain", "publisher", "media", "spend", "qualifier", "voice", "demo", "notifier"] as const;
 const urls: Record<string, string> = {};
-for (const s of services) {
+for (const s of ["dashboard", "oncu", "video", "mailer"] as const) {
   const pw = secret();
   run(`create ${s}_login`, tsx("db/create-login.ts").concat(s), { DB_LOGIN_PASSWORD: pw });
   const u = new URL(adminUrl);
@@ -67,50 +67,32 @@ for (const s of services) {
   urls[s] = u.toString();
 }
 
-// The owner's (fictional) WhatsApp number: the only sender whose replies can approve anything.
-const OWNER_WHATSAPP = "+19055550111";
-run("set owner WhatsApp", tsx("db/set-owner-whatsapp.ts"), { OWNER_WHATSAPP, OWNER_NAME: "Dana Reyes" });
-
-// ONCU Insights import, as the oncu_sync login (it can only add imported data).
-const oncuDir = process.env.ONCU_DATA_DIR || join(ROOT, "../oncu-app/oncu/data");
-let oncuNote = "";
-if (existsSync(join(oncuDir, "registry.json"))) {
-  const r = spawnSync(process.execPath, tsx("workflows/oncu-sync.ts").concat("--dir", oncuDir), {
-    cwd: ROOT, env: { ...process.env, ONCU_SYNC_DATABASE_URL: urls.oncu }, encoding: "utf8" });
-  oncuNote = (r.stdout || r.stderr || "").trim();
-  if (r.status !== 0) { console.error(oncuNote); process.exit(1); }
+// 3. ONCU Insights import, as the oncu_sync login (it can only add imported data)
+const repoDir = process.env.ONCU_REPO_DIR || join(ROOT, "../oncu-app");
+const dataDir = process.env.ONCU_DATA_DIR || join(repoDir, "oncu/data");
+const gitRepo = existsSync(join(repoDir, ".git"));
+let oncuNote: string;
+if (gitRepo) {
+  oncuNote = run("ONCU import", tsx("workflows/oncu-auto.ts").concat("--once"), { ONCU_REPO_DIR: repoDir, ONCU_SYNC_DATABASE_URL: urls.oncu });
+} else if (existsSync(join(dataDir, "registry.json"))) {
+  oncuNote = run("ONCU import", tsx("workflows/oncu-sync.ts").concat("--dir", dataDir), { ONCU_SYNC_DATABASE_URL: urls.oncu });
 } else {
-  oncuNote = `oncu:sync: no ONCU data at ${oncuDir}. Clone Graffisid/oncu-app next to this repo (or set ONCU_DATA_DIR), then run npm run oncu:sync.`;
+  oncuNote = `oncu: no ONCU data found. Clone Graffisid/oncu-app next to this repo (or set ONCU_REPO_DIR / ONCU_DATA_DIR).`;
 }
 console.log(oncuNote);
 
-// 3. Environment (gitignored, owner-only)
+// 4. Environment (gitignored, owner-only)
 const ownerPassword = secret(12);
 const env: Record<string, string> = {
-  MOCK_MODE: "mock",
   DATABASE_URL: adminUrl,
-  INGEST_DATABASE_URL: urls.ingest,
-  BRAIN_DATABASE_URL: urls.brain,
-  PUBLISHER_DATABASE_URL: urls.publisher,
-  MEDIA_DATABASE_URL: urls.media,
-  SPEND_DATABASE_URL: urls.spend,
-  QUALIFIER_DATABASE_URL: urls.qualifier,
   ONCU_SYNC_DATABASE_URL: urls.oncu,
-  ONCU_DATA_DIR: oncuDir,
+  ONCU_REPO_DIR: repoDir,
+  ONCU_DATA_DIR: dataDir,
   VIDEO_DATABASE_URL: urls.video,
   VIDEO_DIR: join(ROOT, ".videos"),
-  VOICE_DATABASE_URL: urls.voice,
-  NOTIFIER_DATABASE_URL: urls.notifier,
-  META_APP_SECRET: secret(),
-  META_WEBHOOK_VERIFY_TOKEN: secret(),
-  CAPTURE_LINK_SECRET: secret(32),
-  PUBLIC_BASE_URL: "http://127.0.0.1:3001",
-  TWILIO_AUTH_TOKEN: secret(),
-  DEMO_MODE: "1",
-  DEMO_DATABASE_URL: urls.demo,
-  DEMO_DELIVER_SECRET: secret(32),
-  DEMO_PHONE_URL: "http://127.0.0.1:3002",
-  OWNER_WHATSAPP,
+  MAILER_DATABASE_URL: urls.mailer,
+  MAIL_MODE: "outbox",
+  OUTBOX_DIR: join(ROOT, ".outbox"),
   DASHBOARD_URL: "http://127.0.0.1:3000",
 };
 mkdirSync(DIR, { recursive: true, mode: 0o700 });
@@ -118,15 +100,16 @@ const envFile = join(DIR, "sandbox.env");
 writeFileSync(envFile, Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
 chmodSync(envFile, 0o600);
 writeFileSync(join(DIR, "owner-password.txt"), ownerPassword + "\n", { mode: 0o600 });
+for (const d of [env.VIDEO_DIR, env.OUTBOX_DIR]) mkdirSync(d, { recursive: true, mode: 0o700 });
 
-// 4. Services
+// 5. Services
 // Rebuild when there is no build yet, or when any dashboard source is newer than it (e.g. after git pull).
 const buildId = join(ROOT, "dashboard/.next/BUILD_ID");
 const newest = (dir: string): number => readdirSync(dir, { withFileTypes: true }).reduce((m, e) => {
   const p = join(dir, e.name);
   return Math.max(m, e.isDirectory() ? newest(p) : statSync(p).mtimeMs);
 }, 0);
-const sources = ["app", "components", "lib"].map((d) => join(ROOT, "dashboard", d)).concat(join(ROOT, "dashboard/proxy.ts"));
+const sources = ["app", "components", "lib", "public"].map((d) => join(ROOT, "dashboard", d)).concat(join(ROOT, "dashboard/proxy.ts"));
 const stale = !existsSync(buildId) ||
   Math.max(...sources.map((p) => (statSync(p).isDirectory() ? newest(p) : statSync(p).mtimeMs))) > statSync(buildId).mtimeMs;
 if (stale) {
@@ -135,6 +118,12 @@ if (stale) {
   if (r.status !== 0) process.exit(1);
 }
 const children: ChildProcess[] = [];
+let stopping = false;
+const stop = (code = 0) => {
+  stopping = true;
+  for (const c of children) c.kill("SIGTERM");
+  setTimeout(() => process.exit(code), 500);
+};
 const start = (name: string, args: string[], extra: NodeJS.ProcessEnv, cwd = ROOT) => {
   const c = spawn(process.execPath, args, { cwd, env: { ...process.env, ...env, ...extra }, stdio: ["ignore", "pipe", "pipe"] });
   const tag = `[${name}]`.padEnd(13);
@@ -155,30 +144,18 @@ const start = (name: string, args: string[], extra: NodeJS.ProcessEnv, cwd = ROO
   });
   children.push(c);
 };
-let stopping = false;
-const stop = (code = 0) => {
-  stopping = true;
-  for (const c of children) c.kill("SIGTERM");
-  setTimeout(() => process.exit(code), 500);
-};
 process.on("SIGINT", () => stop());
 process.on("SIGTERM", () => stop());
 
-mkdirSync(join(ROOT, ".videos"), { recursive: true, mode: 0o700 });
 start("video", tsx("workflows/video-worker.ts"), {});
-if (northshore) {
-  start("receiver", tsx("src/api/start.ts"), {});
-  start("dispatcher", tsx("workflows/voice-dispatcher.ts"), {});
-  start("agents", tsx("workflows/agent-loop.ts"), {});
-  start("phone-demo", tsx("src/demo/server.ts"), {});
-}
+start("mailer", tsx("workflows/mailer.ts"), {});
+if (gitRepo) start("oncu-auto", tsx("workflows/oncu-auto.ts"), { ONCU_AUTO_HOURS: process.env.ONCU_AUTO_HOURS || "6" });
 start("dashboard", [join(ROOT, "dashboard/node_modules/next/dist/bin/next"), "start", "-H", "127.0.0.1", "-p", "3000"], {
   // The dashboard reads these ahead of dashboard/.env.local, so the sandbox never edits that file.
   DATABASE_URL: urls.dashboard,
   DASHBOARD_PASSWORD: ownerPassword,
   SESSION_SECRET: secret(48),
-  OWNER_NAME: "Trisanga owner (sandbox)",
-  VIDEO_DIR: join(ROOT, ".videos"),
+  OWNER_NAME: process.env.OWNER_NAME || "Trisanga owner (sandbox)",
 }, join(ROOT, "dashboard"));
 
 const ready = async (url: string) => {
@@ -190,9 +167,8 @@ const ready = async (url: string) => {
   }
   return false;
 };
-if (!(await ready("http://127.0.0.1:3000/login"))
-    || (northshore && (!(await ready("http://127.0.0.1:3001/healthz")) || !(await ready("http://127.0.0.1:3002/"))))) {
-  console.error("sandbox: services did not come up in 30 s.");
+if (!(await ready("http://127.0.0.1:3000/login"))) {
+  console.error("sandbox: the dashboard did not come up in 30 s.");
   stop(1);
 } else {
   console.log(`
@@ -203,8 +179,8 @@ if (!(await ready("http://127.0.0.1:3000/login"))
  Password    ${ownerPassword}     (also in .sandbox/owner-password.txt)
 
  ${oncuNote}
- After ONCU's Monday run: pull the oncu-app repo, then
-   set -a; . .sandbox/sandbox.env; set +a; npm run oncu:sync
+ ${gitRepo ? "ONCU is checked every 6 hours (ONCU_AUTO_HOURS); your ONCU folder is never changed." : "Run npm run oncu:sync after ONCU's Monday run."}
+ Videos render into .videos/; approved messages are written to .outbox/ as email files.
 
  Ctrl-C stops everything.
 ──────────────────────────────────────────────────────────────────────`);

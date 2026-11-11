@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useRef } from "react";
-import type { ActionState } from "@/app/actions";
+import type { ActionState } from "@/lib/action-state";
 import { toast } from "./Toaster";
 
 /** A form bound to a server action: shows the result as a toast and disables the submit button while saving. */

@@ -2,18 +2,16 @@
  * Creates (or rotates the password of) a least-privilege login role for one service.
  *
  *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- dashboard   # dashboard_login ∈ dashboard_app
- *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- ingest      # ingest_login    ∈ ingest_app
- *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- brain       # brain_login     ∈ brain_app
- *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- publisher   # publisher_login ∈ publisher_app
+ *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- oncu        # oncu_login      ∈ oncu_sync_app
+ *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- video       # video_login     ∈ video_app
+ *   DB_LOGIN_PASSWORD='<long random>' npm run db:create-login -- mailer      # mailer_login    ∈ mailer_app
  *
  * The password comes from the environment only and never touches the repo.
- * (DASHBOARD_DB_PASSWORD is still accepted for the dashboard, for backwards compatibility.)
  */
 import pg from "pg";
 import { databaseUrl, newClient } from "../src/lib/db.ts";
 
-const SERVICES = { dashboard: "dashboard_app", ingest: "ingest_app", brain: "brain_app", publisher: "publisher_app", media: "media_app", spend: "spend_app",
-  qualifier: "qualifier_app", voice: "voice_app", demo: "demo_app", notifier: "notifier_app", oncu: "oncu_sync_app", video: "video_app" } as const;
+const SERVICES = { dashboard: "dashboard_app", oncu: "oncu_sync_app", video: "video_app", mailer: "mailer_app" } as const;
 const service = (process.argv[2] ?? "dashboard") as keyof typeof SERVICES;
 if (!(service in SERVICES)) {
   console.error(`Unknown service "${service}". Use one of: ${Object.keys(SERVICES).join(", ")}`);
@@ -21,7 +19,7 @@ if (!(service in SERVICES)) {
 }
 const group = SERVICES[service];
 const login = `${service}_login`;
-const password = process.env.DB_LOGIN_PASSWORD ?? (service === "dashboard" ? process.env.DASHBOARD_DB_PASSWORD : "") ?? "";
+const password = process.env.DB_LOGIN_PASSWORD ?? "";
 if (password.length < 16) {
   console.error("Set DB_LOGIN_PASSWORD to at least 16 random characters.");
   process.exit(1);

@@ -1236,3 +1236,19 @@ form.busy { opacity: 0.7; }
 .brand-values { font-size: 0.6rem; letter-spacing: 0; }
 .me { min-width: 0; }
 .me-name .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* sharing and learning */
+.narrow-card { max-width: 720px; }
+.start-list { display: grid; gap: 10px; }
+.start-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--hairline); }
+.start-row:first-child { border-top: 0; }
+.share-card { display: grid; gap: 12px; }
+.share-card h3 { font-size: 1rem; font-weight: 650; }
+.share-card .eyebrow a, .contact-list a { color: inherit; }
+.mail-preview { white-space: pre-wrap; font: 0.86rem/1.55 var(--font); background: var(--surface-2); padding: 14px 16px; border-radius: 12px; margin-top: 10px; overflow-wrap: anywhere; }
+.lesson-picks { border: 1px solid var(--hairline); border-radius: 12px; padding: 10px 14px; display: grid; gap: 6px; }
+.lesson-picks legend { font-weight: 600; font-size: 0.88rem; padding: 0 4px; }
+.contact-list, .lesson-list { display: grid; gap: 12px; margin-bottom: 12px; }
+.contact-list li { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.contact-list li > div { min-width: 0; overflow-wrap: anywhere; }
+.add-contact select { font: inherit; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface); color: var(--ink); width: 100%; }

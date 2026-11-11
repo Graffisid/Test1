@@ -8,8 +8,11 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "Overview", icon: "home" },
   { href: "/credit-unions", label: "Credit unions", icon: "users" },
   { href: "/videos", label: "Videos", icon: "film" },
+  { href: "/sharing", label: "Sharing", icon: "send" },
+  { href: "/learning", label: "Learning", icon: "book" },
   { href: "/offerings", label: "Offerings", icon: "compass" },
   { href: "/oncu", label: "ONCU data", icon: "chart" },
+  { href: "/profile", label: "Profile", icon: "user" },
 ];
 
 export function SideNav({ pending, videos = 0 }: { pending: number; videos?: number }) {

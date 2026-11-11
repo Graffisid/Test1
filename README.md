@@ -1,21 +1,26 @@
 # Trisanga Story Studio
 
-Part of Trisanga's **Learning** pillar (young leaders and co-operative development), next to Consulting and Digital
-Products (ONCU Insights), and built on its values: Curiosity · Creativity · Collaboration. The studio reads each Ontario credit union's history from
-**ONCU Insights**, turns it into a story told from the credit union's own audited numbers, and names what is in its
-way. Each pain point is matched to how Trisanga can help. Each credit union's story becomes a short branded video.
+Part of Trisanga's **Learning** pillar (young leaders and co-operative development), alongside Consulting and Digital
+Products (ONCU Insights), built on its values: Curiosity · Creativity · Collaboration.
 
-**The rule:** nothing goes to a credit union without the owner's approval. A fact can only be used after the
-owner approves it, and that approval is tied to the exact numbers. If ONCU changes a figure, the approval no
-longer applies and the statement waits for the owner again.
+The studio reads each Ontario credit union's history from **ONCU Insights** and tells its story from its own audited
+numbers. It names what is in the way, matches each pain point to how Trisanga can help, and turns the story into a
+short branded video. The owner can then share the video with a contact at that credit union, together with
+plain-language learning notes.
+
+**The rule:** nothing reaches a credit union without the owner's approval, at every step.
+- **Statements:** each fact is approved on its own, and the approval is tied to the exact numbers.
+- **Videos:** a video uses only approved statements, and the video itself is approved too.
+- **Messages:** every message is approved before it goes out, and Canada's anti-spam law (CASL) is enforced by the database.
+- **ONCU changes:** if ONCU changes a figure, the statements built on it wait for the owner again.
 
 ## Phases
 
 | Phase | What | State |
 |---|---|---|
-| 1 | ONCU connector with import history, story and pain-point engine, owner approvals, editable offerings, new dashboard | Done |
-| 2 | Video studio: storyboards from approved statements, MP4s (9:16 and 16:9) rendered on this machine, video approval; Trisanga brand (logo, Playfair Display + Plus Jakarta Sans, ivory/teal/burgundy, light and dark) | Done |
-| 3 | Collaboration and education: sharing with a credit union (owner-approved), education library, weekly ONCU auto-sync, retire the remaining Northshore code | Later |
+| 1 | ONCU connector with import history, story and pain-point engine, owner approvals, editable offerings | Done |
+| 2 | Video studio: storyboards from approved statements, MP4s (9:16 and 16:9) rendered locally, video approval; Trisanga brand | Done |
+| 3 | Sharing with credit unions (CASL consent, owner-approved, outbox), education library, automatic ONCU sync, Northshore code retired | Done |
 
 ## Quick start
 
@@ -24,433 +29,100 @@ git clone https://github.com/Graffisid/oncu-app ../oncu-app   # ONCU Insights, n
 npm install && (cd dashboard && npm install)
 npm install --no-save playwright-core@1.56.1 && npx playwright install chromium   # for videos (free, local)
 brew install ffmpeg                                            # for videos (macOS; any ffmpeg with libx264 works)
-npm run sandbox                                                # fresh local database, ONCU import, dashboard on :3000, video worker
+npm run sandbox
 ```
 
-Sign in at <http://127.0.0.1:3000> with the password the sandbox prints. After ONCU's Monday run, pull the
-`oncu-app` repo and run `npm run oncu:sync` (it skips unchanged data). To read ONCU from somewhere else, set
-`ONCU_DATA_DIR` or pass `--dir <oncu-app>/oncu/data`.
+`npm run sandbox` does the following:
+- Resets a local database.
+- Creates a least-privilege login for each service.
+- Imports ONCU's committed `main` branch.
+- Starts the dashboard on <http://127.0.0.1:3000>, plus the video worker, the mailer (outbox only) and the automatic ONCU sync.
+
+Sign in with the password it prints. Use `npm run sandbox -- --keep` to keep your approvals, videos and contacts.
+
+A typical walk-through:
+1. **Profile:** add your name and mailing address. CASL requires them in every message.
+2. **Learning** and **Offerings:** rewrite the draft notes and offerings in Trisanga's voice, then publish the notes.
+3. **A credit union:** approve its statements, then press **Make vertical 9:16**.
+4. **Videos:** watch the video, then approve it.
+5. **A credit union → Contacts:** add a person you may write to, with the consent basis and evidence.
+6. **Sharing:** start a draft, edit it, and approve it. The mailer writes it to `.outbox/` as an email file.
 
 ## How it works
 
-- **Connector (`src/oncu/connector.ts`, `workflows/oncu-sync.ts`).** Reads ONCU's `registry.json` and
-  `credit-unions/<slug>.json`, validates them, and records one **import**. Every value is stored against its
-  import, so past numbers stay readable next to today's. Nothing is written back to ONCU. It keeps only numbers ONCU
-  classifies as audited, official or calculated from those. A ratio is left out when that credit union's base
-  figures are unverified in ONCU. It runs as the `oncu_sync` login, which can only add imported data.
-- **Story engine (`dashboard/lib/story.ts`).** Builds year chapters, whole-period trends and pain points from those
-  numbers alone. Each statement lists the exact figures, ONCU's classification and the source documents. ONCU's
-  own interpretations, member and employee voice, and pending findings are shown as context, never as statements.
-- **Pain points.** Seven plain rules (earnings, costs, margin, funding, capital, growth, credit reserves), each
-  answered by a Trisanga offering. Offerings are a first draft for the owner to rewrite on the Offerings page,
-  where the rule-to-offering mapping is also set.
-- **Approvals.** Approve, set aside or withdraw each statement. Decisions are append-only and pinned to a hash of
-  the numbers.
-
-- **Video studio (`dashboard/lib/storyboard.ts`, `src/video/render.ts`, `workflows/video-worker.ts`).** "Make video"
-  freezes a storyboard from the approved statements only: opening, the years with an assets chart, whole-period
-  trends, up to three pain points each followed by how Trisanga helps (the owner's offering wording), and a close
-  with the sources line. The render worker draws each frame in a headless browser with the Trisanga fonts and glass
-  logo embedded, and ffmpeg encodes an H.264 MP4 (1080×1920 or 1920×1080, about 75 seconds, about 2 minutes to render).
-  No paid service, no network. Files stay in `.videos/` (owner-only). The database refuses a video built on an
-  unapproved statement, and refuses to approve one whose statements were withdrawn; the dashboard also refuses if
-  ONCU's numbers changed since. Download is possible only after approval.
-  Playwright is loaded if present (`playwright-core`, `playwright`, or `PLAYWRIGHT_MODULE`); ffmpeg from `PATH` or `FFMPEG_PATH`.
+- **ONCU connector** (`src/oncu/connector.ts`; `workflows/oncu-auto.ts` and `oncu-sync.ts`):
+  - `oncu:auto` runs `git fetch` on your ONCU checkout and reads `oncu/data` from the committed branch with
+    `git archive`. It never changes your working copy.
+  - Each new commit becomes one **import**. Every value is kept against its import, so past numbers stay next to
+    current ones. Unchanged data is skipped.
+  - It keeps only the numbers ONCU classifies as audited, official or calculated from those. Ratios are dropped
+    where ONCU marks the base figures as unverified.
+  - It runs every 6 hours in the sandbox (`ONCU_AUTO_HOURS`). Use `npm run oncu:auto -- --once` for cron or launchd.
+- **Story engine** (`dashboard/lib/story.ts`):
+  - It builds year chapters, trends over the whole period, and seven pain-point rules.
+  - Each statement lists its figures, ONCU's classification and its sources.
+  - ONCU's interpretations, member and employee voice, and pending findings appear as context only.
+- **Approvals:** append-only, and pinned to a SHA-256 of the numbers. ONCU data → *What changed* lists the
+  credit unions whose numbers moved and the approved statements to review again.
+- **Video studio** (`dashboard/lib/storyboard.ts`, `src/video/render.ts`, `workflows/video-worker.ts`):
+  - A storyboard is built from approved statements only and frozen when the video is requested.
+  - A headless browser draws each frame with the Trisanga fonts and glass logo embedded, and ffmpeg encodes an
+    H.264 MP4: 1080×1920 or 1920×1080, about 75 seconds, about 2 minutes to render.
+  - No paid service and no network. Files stay in `.videos/`.
+- **Sharing** (`dashboard/app/sharing`, `dashboard/lib/message.ts`, `workflows/mailer.ts`):
+  - **Contacts** record the CASL basis (express consent, a published business address with a role-relevant
+    message, or an existing relationship within two years), with evidence and date.
+  - **Drafts** are pre-written, include the learning notes that match the credit union's pain points, and are
+    edited and approved by the owner.
+  - **The mailer** checks the video file's SHA-256, attaches it, and adds the CASL footer and a `List-Unsubscribe`
+    header. It writes a standard `.eml` to `.outbox/`. Nothing is emailed: `MAIL_MODE=outbox` is the only mode.
+  - **Outcomes** (replied, meeting booked, not interested, unsubscribed) are recorded by the owner. Unsubscribes
+    are permanent and cancel anything unsent.
+- **Education library** (`/learning`): eight plain-language notes for boards and teams, one per pain point plus
+  "Reading your financial statements as a director". They are drafts until the owner publishes them.
 
 ### Dashboard
 
-- **Overview:** roster, story-ready credit unions, pain points by offering, what to review next, the last ONCU import.
-- **Credit unions:** all 48, with search and filters by pain point.
-- **A credit union:** a "Story video" panel (what still needs approving, Make vertical / wide, its videos), audited charts, pain points with the Trisanga answer, the year-by-year story, ONCU context (not
-  used in videos), and its import history.
-- **Videos:** every video with its player, storyboard, status, Approve / Decline, and Download once approved.
-- **Offerings:** edit what Trisanga offers and which pain point each one answers.
-- **ONCU data:** every import, with its ONCU commit.
-
----
-
-## Earlier build: Northshore (retired)
-
-The sections below describe the platform this studio was converted from, an AI social media team for a fictional
-plumber. Its dashboard screens are gone. The backend (approval law, least-privilege roles, audit log) is kept for
-reuse in Phases 2 and 3, and its tests still run. `npm run sandbox -- --northshore` starts its services.
-
-### AI Social Media Team (Northshore)
-
-A multi-agent marketing system for a local business. It covers:
-
-- competitor ad research
-- ad and content creation
-- lead capture from comments and DMs
-- a 60-second voice callback to consented leads
-- end-to-end attribution (ad → customer)
-
-The owner approves every spend and every publish.
-
-> **Start with [`MUSE.md`](./MUSE.md).** It holds the operating rules,
-> guardrails, approval law, and agent roster. Behaviour is configured in
-> markdown, not buried in code.
-
-## Status
-
-**Mock mode.** All external integrations (Meta, TikTok, ElevenLabs, Twilio,
-Higgsfield, Google Calendar, Telegram/Slack, Anthropic API) are stubbed. There
-are no real keys, no ad spend, and no calls.
-
-| Phase | What | State |
-|---|---|---|
-| 0 | Scaffold, secrets template, operating rules | Done |
-| 1 | System of record (Postgres schema + seed + gate test) | Done |
-| — | Dashboard (KPIs, approvals queue, activity log, digest) on mock data | Done |
-| 2 | Signals ingestion: Meta webhooks, competitor poller, review import | Done (mock), real Meta app pending |
-| 3 | Brain (triage, ad-writer, auditor, analyst draft scoring) + approval flow + publish gate | Done (mock model; live Claude off until approved) |
-| 4 | Paid ads loop: media, launches, spend caps in the database, 48 h cycle, owner-approved reallocation | Done (simulated spend and media) |
-| 5 | Lead capture (approved-template replies, CASL form) + 60-second callback + booking | Done (simulated calls and calendar; consent wording is a draft for review) |
-| 6–8 | Attribution + digest reconciliation, interrupts, hardening | Later |
+- **Overview:** the roster, which credit unions are ready for a story, pain points by offering, and what to review next.
+- **Credit unions:** all 48, with search and a pain-point filter.
+- **A credit union's page:**
+  - the story video panel;
+  - contacts and the learning notes for that credit union;
+  - audited charts;
+  - pain points with Trisanga's answer, and the year-by-year story;
+  - ONCU context, which is never used in videos;
+  - its import history.
+- **Videos:** player, storyboard, Approve / Decline, and Download after approval.
+- **Sharing:** new messages from approved videos, the drafts and their email previews, approval, the outbox file, and outcomes.
+- **Learning**, **Offerings**, **ONCU data** (what changed, plus every import) and **Profile** (sender details).
 
 ## Layout
 
 ```
-MUSE.md                 Operating rules, guardrails, approval law
-.env.example            Variable names only — never values
-.claude/agents/         The eight agents (role, inputs, outputs, tools, escalation)
-.claude/skills/         competitor-scan, ad-cycle, morning-digest, lead-callback
-workflows/              Scheduled/triggered jobs (stubs until their phase)
-db/migrations/          Numbered SQL migrations
-db/schema.md            Human-readable schema
-dashboard/              Next.js owner dashboard (reads the same Postgres)
-src/api/                Webhook receivers, approval endpoints
-src/lib/                Idempotency, spend-cap, logging helpers
-tests/                  One test per phase gate
+src/oncu/connector.ts        ONCU reader and importer
+src/video/render.ts          frame renderer + ffmpeg encoder
+workflows/oncu-auto.ts       automatic ONCU sync (git, read-only)
+workflows/oncu-sync.ts       import from a plain folder
+workflows/video-worker.ts    renders queued videos
+workflows/mailer.ts          writes approved messages to the outbox
+db/migrations/               001 foundation · 002 ONCU and stories · 003 videos · 004 sharing and learning
+dashboard/                   Next.js 16 owner dashboard (strict CSP, least-privilege DB login)
+tests/                       node:test suites (fictional fixture; no real credit union data in this repo)
 ```
 
-## Run it locally
-
-Requirements: Node 20 or newer, and Postgres 16 on `localhost:5432`.
+## Checks
 
 ```bash
-npm install
-cp .env.example .env     # optional: set DATABASE_URL
-npm run db:reset         # drop, migrate from empty, seed mock data
-npm test                 # Phase 1 gate + security tests (least privilege, append-only log, sessions)
+npm test                          # database rules, connector, stories, videos, sharing (needs a local Postgres)
 npm run typecheck
+cd dashboard && npm run build && npm run security-check
 ```
 
-If `DATABASE_URL` is unset, the scripts default to
-`postgres://postgres:postgres@localhost:5432/ai_social_team`. Use that default
-for local development only.
+The render test runs when Playwright and ffmpeg are installed, and is skipped otherwise.
 
-The schema, guardrails, and KPI views are documented in
-[`db/schema.md`](./db/schema.md).
+See [SECURITY.md](./SECURITY.md) for the threat model and [db/schema.md](./db/schema.md) for the tables.
 
-### Sandbox: click through the whole platform
+## History
 
-```bash
-npm install && (cd dashboard && npm install)
-npm run sandbox            # or: npm run sandbox -- --keep  (keeps current data)
-```
-
-This command:
-
-- Resets the **local** database to fresh seed data. It refuses to run against any other host.
-- Creates every least-privilege login with a new random password.
-- Starts:
-  - the dashboard at <http://127.0.0.1:3000> (it prints a one-time owner password),
-  - the **customer's phone** demo at <http://127.0.0.1:3002>,
-  - the webhook receiver and quote form on port 3001,
-  - the AI team: an agent loop (sorting, replies, texts, publishing) and the callback worker.
-
-The passwords and service URLs are written to `.sandbox/`. That folder is gitignored and readable only by
-you. `dashboard/.env.local` is never touched. Everything external stays simulated. Ctrl-C stops it all.
-
-**To show a business owner:** open the dashboard's **Demo** page. It opens with a picture story of one real
-(fictional) customer, from the reel they saw to the paid job: the post, their comment, our reply, the form and
-consent, the callback or texts, the booking and the receipt, with the time between each step. **Present** plays
-it full screen (arrow keys or autoplay, Esc to leave), and **Show another customer** picks a different one. Below
-it, "What it adds up to" shows the last 30 days as one funnel. Then comes the live script:
-
-1. Comment on the post on the customer's phone.
-2. Open the link in Northshore's reply and choose "Text me a quote".
-3. Answer the texts.
-4. Confirm the booking on the dashboard.
-5. Open the customer's audit report.
-
-The customer's phone sends signed webhooks into the real pipeline, exactly as Facebook and Twilio would.
-
-**Dashboard pages:**
-
-- **Today:** summary, flow, weekly tiles, approvals and the live feed.
-- **Customers:** everyone who reached out. Each has a printable audit trail, from the ad to the booking.
-- **Connections:** every outside service, with an on/off switch, plus what's coming up and the automatic
-  routines.
-- **Demo:** the reel-to-paid-customer story (with Present mode), the 30-day funnel, the live script and a
-  sample phone call.
-- **Reports:** pick Day, 15 days, 1 month, 3 months, 6 months or 1 year. Each period is compared with the one
-  before it: KPI cards, money collected vs ad spend by day/week/month, the money horseshoe, the funnel, what
-  earned the money, which ads paid off and where people came from. **Print or save as PDF** gives a clean copy.
-
-To drive pieces by hand instead, open a second terminal:
-
-```bash
-set -a; . .sandbox/sandbox.env; set +a
-npm run simulate:meta                         # a burst of signed fake comments, DMs, a lead form, a review
-npm run brain:write-ads -- "Furnace Tune-Up"  # then Approve a draft in the dashboard
-npm run texts:agent -- --once                 # the texting side of the phone assistant, once
-```
-
-## Signals ingestion (Phase 2)
-
-```bash
-# once: least-privilege DB login for the receiver, poller and imports
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- ingest
-# then set INGEST_DATABASE_URL, META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN (see .env.example)
-
-npm run ingest:start                       # webhook receiver on http://127.0.0.1:3001
-npm run simulate:meta -- --repeat          # signed test deliveries (comments, DMs, lead form, rating)
-npm run poll:competitors                   # competitor ads (mock source)
-npm run poll:competitors -- --csv ads.csv  # manual import from the public Ad Library website
-npm run reviews:import -- reviews.csv      # manual review import
-```
-
-- **Webhook receiver** (`src/api/`): the receiver checks each delivery in a
-  fixed order:
-  1. **Size:** anything over 1 MB is refused.
-  2. **Signature:** the `X-Hub-Signature-256` HMAC is checked against the raw
-     bytes.
-  3. **JSON:** the body is parsed.
-  4. **Store:** each event becomes a `signals` row, keyed on Meta's event id,
-     so retries are no-ops.
-
-  What it handles:
-  - Page comments, lead forms, and ratings.
-  - Instagram comments and mentions.
-  - Messenger and Instagram DMs.
-
-  Our own echoes and edits are ignored. Anything the public writes is stored
-  as `payload.untrusted_text`.
-- **Competitor poller** (`workflows/poll-competitors.ts`): records first-seen
-  and last-seen for every ad from the tracked competitors. It scores each ad
-  with the Section 8 rubric and stores the full breakdown. The first sighting
-  of an ad raises one `ad_library` signal.
-
-  **The Ad Library API can't see Canadian commercial ads**, so the only real
-  source today is a manual CSV import. See the `MUSE.md` provider log.
-- **Provenance:** every signal records `ingested_via`: `webhook`, `poller`,
-  `manual_import`, `simulator`, or `seed`.
-
-## The brain and the approval flow (Phase 3)
-
-```bash
-# once: least-privilege logins for the agents and the publisher
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- brain       # → BRAIN_DATABASE_URL
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- publisher   # → PUBLISHER_DATABASE_URL
-
-npm run brain:triage                          # classify + route every new signal
-npm run brain:write-ads -- "Furnace Tune-Up"  # 20 drafts → auditor → analyst → top 3 to your queue
-# approve / edit / reject in the dashboard
-npm run publish:approved                      # the ONLY publish path (simulated: nothing reaches Meta)
-```
-
-- **triage** classifies each signal: intent, confidence, language, urgency,
-  and where it goes (`route_to`).
-  - **Validation:** the output must pass a Zod schema. Anything invalid is
-    discarded, logged, and routed to a human.
-  - **Routing rules:** code overrides the model. Anything angry, or below 0.70
-    confidence, goes to a human, and a database constraint enforces this too.
-  - **Untrusted text:** public text reaches the model inside
-    `<untrusted_customer_text>` as data. A message that tries to give
-    instructions is routed to a human.
-- **ad-writer** writes 20 variants per cycle. It learns from your scored
-  winners and from competitor concepts in the learn-from tier.
-  - **Auditor** (code): rejects banned claims and flags unverifiable ones,
-    using the rules in `MUSE.md`.
-  - **Analyst** (code): scores every surviving draft with a transparent rubric.
-    The top 3 become `draft` variants, each with a `pending` approval.
-  - **Once per cycle:** each ad gets one run per cycle.
-  - **No status changes:** ad-writer can't set any status. Its column-level
-    database grants won't allow it.
-- **Publish gate:** every publish is a `publications` row. The database refuses
-  one unless a human approved that approval, before it expired. One approval
-  allows at most one publication.
-
-  A variant can't be `live` without a publication, and this is checked at
-  commit, even for the superuser. Rejecting a draft therefore makes every
-  publish path fail.
-- **Model:**
-  - **Default:** a deterministic mock, so nothing is paid.
-  - **Live Claude:** set `LLM_MODE=live`, with `MOCK_MODE` not equal to `mock`.
-    This uses `claude-opus-5-5` via the official SDK's structured outputs
-    (`messages.parse`), at `low` effort for triage and `medium` for ad-writer.
-  - **Daily cap:** live calls are capped per day by `LLM_DAILY_BUDGET_CAD`,
-    checked in code against the activity log.
-
-## Paid ads loop (Phase 4)
-
-```bash
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- media   # → MEDIA_DATABASE_URL
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- spend   # → SPEND_DATABASE_URL
-
-npm run spend:execute            # launches + budget changes the OWNER approved (simulated spend)
-npm run media:produce            # video + voiceover for approved variants (simulated, no credits)
-npm run publish:approved         # publishes approved variants once their media is ready
-npm run ads:sync-insights -- --days 2   # simulated daily results → metrics
-npm run ads:cycle                # analyst: classify, file the cycle report, PROPOSE a reallocation
-```
-
-- **Spend caps** are in the database: table `spend_caps`, with a trigger on
-  every launch and every budget increase, for every role including the
-  superuser.
-  - **Per-ad daily cap:** $40.
-  - **Daily circuit breaker:** $100 across all live ads.
-  - **Weekly cap:** this week's actual spend plus the remaining days at
-    current budgets must stay at or under $500.
-  - **Freeze:** a spend freeze blocks every increase.
-
-  Decreases and pauses are never blocked.
-- **Executor:** launches and budget changes happen only through database
-  functions (`launch_ad`, `apply_budget_change`, `kill_variant`). Each one
-  re-verifies a human-approved approval.
-  - The spend role has **no** direct UPDATE on ads.
-  - One approval gives at most one change per ad.
-  - A refused change is logged as a `budget_limit_reached` block.
-- **48 h cycle** (`workflows/ad-cycle-48h.ts`):
-  - **Classify:** each live variant is classified with the Section 8 rules.
-  - **Report:** the cycle files a report naming the winner with its data.
-  - **Propose:** it proposes, never executes, a +20% budget for ads with a
-    winner (inside the caps), kills losers, and pauses all-loser ads. Missing
-    data means "hold".
-- **media-producer** generates only after the copy is approved, using a
-  different voice per variant. It stops and escalates before a batch would
-  cost over `MEDIA_BATCH_THRESHOLD_CAD`, or after 2 failures in a row.
-
-## Lead capture and the 60-second callback (Phase 5)
-
-```bash
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- qualifier   # → QUALIFIER_DATABASE_URL
-DB_LOGIN_PASSWORD="$(openssl rand -hex 24)" npm run db:create-login -- voice       # → VOICE_DATABASE_URL
-# + CAPTURE_LINK_SECRET and PUBLIC_BASE_URL (see .env.example)
-
-npm run ingest:start          # also serves the capture form (/c/<token>) and opt-out (/u/<token>)
-npm run voice:dispatcher      # worker: wakes on every new consented lead (Postgres NOTIFY), polls as fallback
-npm run leads:qualify         # approved-template replies with capture links; leads from Meta lead forms
-```
-
-- **lead-qualifier** replies only with an owner-approved template from
-  `MUSE.md`, word for word, plus a personal signed link.
-  - The link expires after 7 days and carries attribution to the comment and
-    the ad.
-  - Each comment gets one reply, and angry comments get none.
-  - A Meta lead form counts as consent only if it showed our exact wording.
-- **Capture form:**
-  - **Consent box:** never pre-ticked. It shows the exact CASL wording from
-    `MUSE.md` and the sender's identification. The wording, version, and time
-    are stored with every lead.
-  - **One lead per link.**
-  - **Protections:** server-side validation, a honeypot field, per-IP rate
-    limiting, and a strict CSP with no scripts.
-- **voice-dispatcher:** the call row is written **before** dialling, so a
-  crash or a duplicate wake-up can never call twice.
-  - **Attempts:** at most 2, 10 minutes apart. After two failures, the lead
-    goes to a human.
-  - **Big deals:** estimated value ≥ $5,000 goes straight to the owner and the
-    sales lead, with no AI call.
-  - **Bookings:** go to Mon–Sat business hours.
-- **CASL in the database:** a call is refused unless consent is stored and not
-  withdrawn, and the number isn't on the do-not-contact list. This holds for
-  every role.
-
-  Every confirmation page has an opt-out link, which withdraws consent for that
-  number and suppresses it.
-
-## Content studio and WhatsApp approvals
-
-The market analyst reads competitors' ads (what they run, how long, which format, which themes) and your
-own results, and writes a brief. The content writer turns it into reels, image posts and carousels. Every
-draft passes eight guardrails in code (`src/brain/content-guard.ts`); the best 3 go to your WhatsApp with a
-one-time code and to the Today page. Approved posts get their media, then publish at their scheduled time.
-
-```bash
-npm run market:analyze      # brief (mock model unless LLM_MODE=live)
-npm run content:create      # drafts → guardrails → approval requests
-npm run whatsapp:notify     # send pending requests to the owner's WhatsApp (simulated)
-OWNER_WHATSAPP=+1XXXXXXXXXX OWNER_NAME='Your Name' npm run db:set-owner-whatsapp   # as the DB owner
-```
-
-In the sandbox: dashboard → **Studio** → "Analyse the market" → "Create posts", then open the pretend
-phone's **Owner WhatsApp** tab (http://127.0.0.1:3002/owner) and tap Approve. "Reply APPROVE from a
-stranger's number" shows that nobody else can approve. See SECURITY.md for every check.
-
-## Dashboard
-
-The owner dashboard follows the ONCU Insights look: a sidebar, big clear numbers with "vs last week" badges, and
-hand-drawn SVG charts (no chart library) where every bar and point shows its numbers on hover, tap or keyboard
-focus. The Overview compares the last 7 days with the week before (click any number card to chart it day by day),
-follows reach → enquiries → callbacks → bookings → paid, and shows money collected as a horseshoe for 15 days,
-1, 3, 6 or 12 months, plus a 4-week projection. Fonts (Hanken Grotesk, Sora; SIL OFL) are bundled in
-`dashboard/app/fonts`. **Needs your OK** shows each post or ad as it will look on Instagram, Facebook, TikTok, LinkedIn
-or WhatsApp (an SVG poster built from the checked text), with Approve & schedule, Decline with a note, Edit text, and
-Send to my WhatsApp. **Your team** shows six roles (social media, calls, texts, assistant, bookings, manager), each built
-from real rows: last 7 days vs the week before, a 12-week graph, a live feed, an auto-written weekly report and the
-rules it can't break (`dashboard/lib/team.ts`). **Customers** is a day-by-day timeline of every enquiry (channel, request,
-how far they got, filters by period, channel, stage and name), and each person's page opens with their journey —
-reached out → details & consent → callback or text → booked → paid, with the time between steps — above the full
-audit trail. **Profile** (click your name in the sidebar) holds your details, business details and WhatsApp settings
-(auto-send switch; changing the number needs your password and a code sent to the new number). **Connections** lists
-every service — Facebook & Instagram, TikTok, LinkedIn, Twilio, WhatsApp, Telegram, ElevenLabs, Google Calendar,
-Calendly, Trello, Claude, Higgsfield, image generation — with Connect (a practice sign-in for now), an on/off switch
-and Disconnect. The seed includes 12 months of fictional, seasonal history (`db/seed-history.ts`).
-
-```bash
-# once: least-privilege DB login for the dashboard (never the superuser)
-DASHBOARD_DB_PASSWORD="$(openssl rand -hex 24)" npm run db:create-dashboard-login
-
-cd dashboard
-npm install
-cp .env.example .env.local   # fill in DATABASE_URL, DASHBOARD_PASSWORD, SESSION_SECRET
-npm run build && npm start   # http://127.0.0.1:3000 — owner sign-in required
-npm run security-check       # (in another terminal) 20 HTTP-level security checks
-```
-
-Security model, threat table and remaining risks: [`SECURITY.md`](./SECURITY.md).
-
-The dashboard is written for an owner who isn't technical: plain words, one accent colour, and gentle
-motion. All motion is CSS/SVG, with no animation library, and it switches off under the system's
-"reduce motion" setting. Light and dark modes both work, and so do phone screens.
-
-- **Today (`/`):**
-  - **Summary line:** a one-sentence summary of the last 7 days, and how many items need your OK.
-  - **How your ads turn into jobs:** an animated flow covering the last 30 days. It goes ad spend →
-    people who reached out → called back → booked → paid, with the conversion between each step and
-    the return per $1.
-  - **This week vs last week:** four tiles: callback speed (a gauge against the 60-second goal),
-    cost per lead, jobs booked, and money collected. Each says whether it's better or worse than
-    last week, with a 14-day chart.
-  - **Needs your OK:** each item is shown the way the public would see it. An ad looks like an ad,
-    a review reply looks like a reply, and a budget change shows a meter against the weekly cap. Each
-    one also says what happens if you approve it, with **Approve**, **Edit** and **Decline** buttons.
-  - **What your team is doing:** a live feed that refreshes every 5 seconds. Agents have plain role
-    names ("Phone assistant", "Ad writer"), repeated entries are folded into one line, and a
-    "Needs attention" tab shows only interrupts and escalations.
-- **Reports (`/digest`):** `?period=day` (the default) is the one-page summary from
-  `.claude/skills/morning-digest/` for any past day, now with changes vs the day before.
-  `?period=15|30|90|180|365` is a graphical report for that period vs the one before it. Periods end
-  yesterday, so they only count complete days. When there are no earlier records (the sandbox has 12 months
-  of history), the page says so instead of showing a fake "new".
-
-**Approve** writes an `approvals` row decided by the owner, plus activity-log rows. It doesn't publish
-or spend by itself: the publisher and the spend executor do that on their next run, and both are
-simulated in this build. A short confirmation appears in the corner.
-
-- **Edit** keeps the item pending.
-- **Decline** takes an optional note.
-- **Unverified claims:** a draft flagged for one can't be approved until you confirm the claim. The
-  server enforces this as well as the browser.
-- **Expired items:** pending items past their deadline are marked expired, never approved.
-
-`npm run db:seed` (from the repo root) restores the demo queue.
-
-## Secrets
-
-Copy `.env.example` to `.env` and fill it in locally. Use the host's secret
-store in production. Never commit a real key. If one is ever committed,
-rotate it.
+This repository started as "Northshore", an AI social media team for a fictional plumber. It was converted to the
+Trisanga Story Studio in three phases, and the Northshore code was retired in Phase 3. It is still in git history.

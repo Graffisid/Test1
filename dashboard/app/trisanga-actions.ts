@@ -11,7 +11,7 @@ import { OWNER_NAME, q } from "@/lib/db";
 import { getCuStory } from "@/lib/oncu";
 import { buildStoryboard } from "@/lib/storyboard";
 import { requireOwner } from "@/lib/session";
-import type { ActionState } from "./actions";
+import type { ActionState } from "@/lib/action-state";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 

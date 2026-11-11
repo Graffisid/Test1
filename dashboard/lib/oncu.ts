@@ -57,7 +57,7 @@ export async function getCuStory(id: string): Promise<CuStory | null> {
   return { cu, story, rules, offerings, decisions, state, sources, history };
 }
 
-export interface CuSummary extends CuRow { years: number; pains: { key: string; title: string; offering_key: string }[]; claims: number; approved: number; waiting: number; enough: boolean; latest_assets: number | null }
+export interface CuSummary extends CuRow { years: number; pains: { key: string; title: string; offering_key: string }[]; claims: number; approved: number; waiting: number; stale: number; enough: boolean; latest_assets: number | null }
 
 /** Every credit union with its story status, for the list and the overview. */
 export async function getPortfolio(): Promise<CuSummary[]> {
@@ -79,6 +79,8 @@ export async function getPortfolio(): Promise<CuSummary[]> {
     return { ...cu, years: s.years.length, enough: s.enough, latest_assets: assets, claims: claims.length,
       approved: claims.filter((c) => approvalFor(c, ds)?.decision === "approved").length,
       waiting: s.enough ? claims.filter((c) => !approvalFor(c, ds)).length : 0,
+      // Approved before, but ONCU's numbers have changed since: back to "waiting" until the owner looks again.
+      stale: claims.filter((c) => !approvalFor(c, ds) && ds.some((d) => d.claim_key === c.key && d.decision === "approved")).length,
       pains: s.pains.map((p) => ({ key: p.rule, title: p.title, offering_key: p.offering_key })) };
   });
 }
@@ -112,4 +114,38 @@ export async function getVideos(cuId?: string): Promise<VideoRow[]> {
 export async function getVideoReviewCount(): Promise<number> {
   const [r] = await q<{ n: number }>(`SELECT count(*)::int AS n FROM videos WHERE status = 'ready'`);
   return r?.n ?? 0;
+}
+
+// ── Sharing and learning (migration 004) ──────────────────────────────────────────────────────
+export interface SenderProfile { sender_name: string; title: string; organization: string; email: string; mailing_address: string; website: string; updated_by: string | null }
+export interface ContactRow { id: number; cu_id: string; full_name: string; role_title: string; email: string; consent_basis: "express" | "published" | "relationship";
+  consent_evidence: string; consent_date: string; added_by: string; added_at: string; unsubscribed_at: string | null; sendable: boolean }
+export interface LessonRow { key: string; title: string; summary: string; body: string; rule_key: string | null; status: "draft" | "published"; sort: number; updated_by: string | null }
+export interface ShareRow { id: number; video_id: number; contact_id: number; cu_id: string; cu_name: string; cu_short: string; contact_name: string; contact_email: string; format: string;
+  subject: string; body: string; lesson_keys: string[]; status: string; created_at: string; approved_by: string | null; approved_at: string | null;
+  sent_at: string | null; delivery_ref: string | null; error: string | null; outcome: string; outcome_note: string | null; unsubscribed: boolean }
+
+export const getSender = async () => (await q<SenderProfile>(`SELECT sender_name, title, organization, email, mailing_address, website, updated_by FROM sender_profile WHERE id = 1`))[0];
+export const senderComplete = (s: SenderProfile) => s.sender_name.trim().length >= 2 && s.mailing_address.trim().length >= 10;
+export const getContacts = (cuId?: string) => q<ContactRow>(
+  `SELECT c.*, consent_date::text, contact_sendable(c.id) AS sendable FROM contacts c WHERE ($1::text IS NULL OR c.cu_id = $1) ORDER BY c.full_name`, [cuId ?? null]);
+export const getLessons = () => q<LessonRow>(`SELECT key, title, summary, body, rule_key, status, sort, updated_by FROM lessons ORDER BY sort, key`);
+export const getShares = (cuId?: string) => q<ShareRow>(
+  `SELECT s.id, s.video_id, s.contact_id, v.cu_id, cu.name AS cu_name, cu.short_name AS cu_short, c.full_name AS contact_name, c.email AS contact_email, v.format, s.subject, s.body,
+          s.lesson_keys, s.status, s.created_at, s.approved_by, s.approved_at, s.sent_at, s.delivery_ref, s.error, s.outcome, s.outcome_note,
+          c.unsubscribed_at IS NOT NULL AS unsubscribed
+   FROM shares s JOIN videos v ON v.id = s.video_id JOIN contacts c ON c.id = s.contact_id JOIN credit_unions cu ON cu.id = v.cu_id
+   WHERE ($1::text IS NULL OR v.cu_id = $1) ORDER BY s.created_at DESC LIMIT 300`, [cuId ?? null]);
+
+/** Per credit union: numbers new, changed or gone between the latest two imports that included it. */
+export async function getLatestChanges(): Promise<{ cu_id: string; name: string; changed: number; latest: number; previous: number }[]> {
+  return q(`WITH per AS (
+      SELECT cu_id, max(import_id) AS latest, (SELECT max(import_id) FROM cu_metric_values w WHERE w.cu_id = v.cu_id AND w.import_id < max(v.import_id)) AS previous
+      FROM cu_metric_values v GROUP BY cu_id)
+    SELECT p.cu_id, c.name, p.latest::int, p.previous::int,
+      ((SELECT count(*) FROM (SELECT year, metric, value FROM cu_metric_values WHERE cu_id = p.cu_id AND import_id = p.latest
+                              EXCEPT SELECT year, metric, value FROM cu_metric_values WHERE cu_id = p.cu_id AND import_id = p.previous) a)
+     + (SELECT count(*) FROM (SELECT year, metric FROM cu_metric_values WHERE cu_id = p.cu_id AND import_id = p.previous
+                              EXCEPT SELECT year, metric FROM cu_metric_values WHERE cu_id = p.cu_id AND import_id = p.latest) b))::int AS changed
+    FROM per p JOIN credit_unions c ON c.id = p.cu_id WHERE p.previous IS NOT NULL ORDER BY changed DESC, c.name`);
 }

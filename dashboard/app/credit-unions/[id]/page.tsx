@@ -5,13 +5,14 @@ import { CuMark } from "@/components/CuMark";
 import { Icon } from "@/components/Icon";
 import { YearBars } from "@/components/charts/YearBars";
 import { requireOwnerPage } from "@/lib/session";
-import { getCuStory, getFacts, getVideos, type ClaimState, type CuStory } from "@/lib/oncu";
+import { getContacts, getCuStory, getFacts, getLessons, getVideos, type ClaimState, type CuStory } from "@/lib/oncu";
 import { MAX_PAINS, MIN_CHAPTERS, readiness } from "@/lib/storyboard";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { VideoCard } from "@/components/VideoCard";
 import { display, label } from "@/lib/numbers";
 import type { Claim, PainPoint } from "@/lib/story";
 import { approveAllAction, decideClaimAction, requestVideoAction } from "../../trisanga-actions";
+import { addContactAction, unsubscribeContactAction } from "../../sharing-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +89,9 @@ export default async function CuStoryPage({ params }: { params: Promise<{ id: st
   const s = await getCuStory(id);
   if (!s) notFound();
   const { cu, story } = s;
-  const [facts, videos] = await Promise.all([getFacts(cu.id, cu.last_import_id), getVideos(cu.id)]);
+  const [facts, videos, contacts, lessons] = await Promise.all([getFacts(cu.id, cu.last_import_id), getVideos(cu.id), getContacts(cu.id), getLessons()]);
+  const forThem = lessons.filter((l) => l.status === "published" && (!l.rule_key || story.pains.some((p) => p.rule === l.rule_key)));
+  const today = new Date().toISOString().slice(0, 10);
   const ready = readiness({ story, approved: (c) => s.state(c) === "approved" });
   const busy = videos.some((v) => v.status === "queued" || v.status === "rendering");
   const offering = new Map(s.offerings.map((o) => [o.key, o]));
@@ -161,6 +164,53 @@ export default async function CuStoryPage({ params }: { params: Promise<{ id: st
           {videos.length > 0 && <div className="video-grid">{videos.map((v) => <VideoCard key={v.id} v={v} showCu={false} />)}</div>}
         </section>
       )}
+
+      <div className="grid-2">
+        <section className="card rise" aria-labelledby="contacts-h">
+          <header className="card-head"><div><p className="eyebrow">Collaboration</p><h2 id="contacts-h">Contacts at {cu.short_name}</h2></div>
+            {videos.some((v) => v.status === "approved") && <Link href="/sharing" className="btn small">Share the story</Link>}</header>
+          {contacts.length === 0 ? <p className="muted small">No contacts yet. Add someone you may write to under Canada&apos;s anti-spam law (CASL).</p> : (
+            <ul className="plain contact-list">
+              {contacts.map((c) => (
+                <li key={c.id}>
+                  <div><strong>{c.full_name}</strong> <span className="muted small">· {c.role_title} · {c.email}</span>
+                    <p className="muted small">{c.consent_basis === "express" ? "Agreed to hear from us" : c.consent_basis === "published" ? "Published business address" : "Existing relationship"}: {c.consent_evidence} ({c.consent_date})</p></div>
+                  {c.unsubscribed_at ? <span className="pill flat">Unsubscribed</span> : !c.sendable ? <span className="pill warn">Consent lapsed</span> : (
+                    <ActionForm action={unsubscribeContactAction} confirm={`Unsubscribe ${c.full_name}? This can't be undone.`}>
+                      <input type="hidden" name="contact_id" value={c.id} /><button type="submit" className="btn small ghost">Unsubscribe</button>
+                    </ActionForm>)}
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="fact-group add-contact">
+            <summary><strong>Add a contact</strong></summary>
+            <ActionForm action={addContactAction} className="offer-form" resetOnSuccess>
+              <input type="hidden" name="cu_id" value={cu.id} />
+              <label>Name<input name="full_name" maxLength={120} required /></label>
+              <label>Role<input name="role_title" maxLength={120} required placeholder="CEO, Board chair, VP Marketing…" /></label>
+              <label>Email<input name="email" type="email" maxLength={200} required /></label>
+              <label>Why you may write to them
+                <select name="consent_basis" required defaultValue="published">
+                  <option value="published">Their business email is published and this relates to their role</option>
+                  <option value="express">They agreed to hear from Trisanga</option>
+                  <option value="relationship">Existing business relationship (last 2 years)</option>
+                </select></label>
+              <label>Evidence <span className="muted small">(the page where it&apos;s published, or when and how they agreed)</span><input name="consent_evidence" maxLength={500} required /></label>
+              <label>Date of consent or publication<input name="consent_date" type="date" max={today} defaultValue={today} required /></label>
+              <div className="offer-foot"><span className="muted small">Only add people you may contact. Unsubscribes are permanent.</span><button type="submit" className="btn small primary">Add</button></div>
+            </ActionForm>
+          </details>
+        </section>
+
+        <section className="card rise" aria-labelledby="learn-h">
+          <header className="card-head"><div><p className="eyebrow">Learning</p><h2 id="learn-h">Notes for {cu.short_name}&apos;s board and team</h2></div>
+            <Link href="/learning" className="btn small">Library</Link></header>
+          {forThem.length === 0 ? <p className="muted small">No published notes match yet. Publish notes in the Learning library.</p> : (
+            <ul className="plain lesson-list">{forThem.map((l) => <li key={l.key}><strong>{l.title}</strong><p className="muted small">{l.summary}</p></li>)}</ul>
+          )}
+        </section>
+      </div>
 
       {(story.series.assets || story.series.netIncome) && (
         <div className="grid-2">

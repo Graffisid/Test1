@@ -45,7 +45,7 @@ before(async () => {
   await migrate(testUrl.toString());
   admin = new pg.Client({ connectionString: testUrl.toString() });
   await admin.connect();
-  for (const role of ["dashboard_app", "oncu_sync_app", "brain_app"]) {
+  for (const role of ["dashboard_app", "oncu_sync_app", "video_app"]) {
     pools[role] = new pg.Pool({ connectionString: testUrl.toString(), options: `-c role=${role}`, max: 2 });
   }
 });
@@ -130,7 +130,7 @@ describe("least privilege", () => {
   });
 
   test("other services can't touch ONCU data or approvals", async () => {
-    await assert.rejects(as("brain_app", (c) => c.query(`SELECT * FROM cu_metric_values`)), /permission denied/);
+    await assert.rejects(as("video_app", (c) => c.query(`SELECT * FROM cu_metric_values`)), /permission denied/);
     await assert.rejects(as("oncu_sync_app", (c) => c.query(
       `INSERT INTO claim_approvals (cu_id, claim_key, claim_hash, claim_text, decision, decided_by, import_id)
        VALUES ('maplebrook', 'pain:cost-heavy', repeat('a', 64), 'x', 'approved', 'oncu', 1)`)), /permission denied/);

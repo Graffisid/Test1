@@ -1,0 +1,238 @@
+{
+ "dataset": {
+  "profile": {
+   "id": "maplebrook",
+   "name": "Maplebrook Community Credit Union",
+   "short": "Maplebrook",
+   "currentCEO": "Alex Example",
+   "chair": "Sam Sample",
+   "branches": 4,
+   "reportingYear": 2025,
+   "asOf": "October 4, 2026",
+   "dataTier": "full",
+   "caveat": "Fictional test data."
+  },
+  "executiveInsight": {
+   "title": "Growth is not turning into earnings.",
+   "summary": "An interpretation that must never reach a video."
+  },
+  "metricCatalog": [
+   {
+    "id": "assets",
+    "classification": "Audited data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "deposits",
+    "classification": "Audited data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "loans",
+    "classification": "Audited data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "netIncome",
+    "classification": "Audited data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "costIncome",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "niiAssets",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "riskCapital",
+    "classification": "Audited data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "loanDepositRatio",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "assetGrowth",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "loanGrowth",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "depositGrowth",
+    "classification": "Calculated data",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   },
+   {
+    "id": "members",
+    "classification": "Reported observation; unverified values remain empty",
+    "sources": [
+     "F21",
+     "F25"
+    ]
+   }
+  ],
+  "sources": [
+   {
+    "id": "F21",
+    "label": "FY2021 audited statements",
+    "url": "https://maplebrook.example/fs2021.pdf",
+    "kind": "Audited financial statement",
+    "year": 2021
+   },
+   {
+    "id": "F25",
+    "label": "FY2025 audited statements",
+    "url": "https://maplebrook.example/fs2025.pdf",
+    "kind": "Audited financial statement",
+    "year": 2025
+   }
+  ],
+  "queries": {
+   "financials": {
+    "rows": [
+     {
+      "year": 2021,
+      "assets": 400000000.0,
+      "deposits": 350000000.0,
+      "loans": 340000000.0,
+      "netIncome": 1200000.0,
+      "costIncome": 85.0,
+      "niiAssets": 2.1,
+      "riskCapital": 17.0,
+      "loanDepositRatio": 97.14285714285714,
+      "assetGrowth": null,
+      "loanGrowth": null,
+      "depositGrowth": null,
+      "members": null
+     },
+     {
+      "year": 2022,
+      "assets": 410000000.0,
+      "deposits": 355000000.0,
+      "loans": 360000000.0,
+      "netIncome": 1000000.0,
+      "costIncome": 88.0,
+      "niiAssets": 2.0,
+      "riskCapital": 16.0,
+      "loanDepositRatio": 101.40845070422534,
+      "assetGrowth": 2.499999999999991,
+      "loanGrowth": 5.882352941176472,
+      "depositGrowth": 1.4285714285714235,
+      "members": null
+     },
+     {
+      "year": 2023,
+      "assets": 420000000.0,
+      "deposits": 360000000.0,
+      "loans": 380000000.0,
+      "netIncome": 900000.0,
+      "costIncome": 92.0,
+      "niiAssets": 1.95,
+      "riskCapital": 15.0,
+      "loanDepositRatio": 105.55555555555556,
+      "assetGrowth": 2.4390243902439046,
+      "loanGrowth": 5.555555555555558,
+      "depositGrowth": 1.4084507042253502,
+      "members": null
+     },
+     {
+      "year": 2024,
+      "assets": 430000000.0,
+      "deposits": 365000000.0,
+      "loans": 395000000.0,
+      "netIncome": 700000.0,
+      "costIncome": 95.0,
+      "niiAssets": 1.85,
+      "riskCapital": 13.5,
+      "loanDepositRatio": 108.21917808219179,
+      "assetGrowth": 2.3809523809523725,
+      "loanGrowth": 3.9473684210526327,
+      "depositGrowth": 1.388888888888884,
+      "members": null
+     },
+     {
+      "year": 2025,
+      "assets": 432000000.0,
+      "deposits": 366000000.0,
+      "loans": 400000000.0,
+      "netIncome": -200000.0,
+      "costIncome": 99.0,
+      "niiAssets": 1.7,
+      "riskCapital": 12.0,
+      "loanDepositRatio": 109.28961748633881,
+      "assetGrowth": 0.46511627906977715,
+      "loanGrowth": 1.2658227848101333,
+      "depositGrowth": 0.273972602739736,
+      "members": null
+     }
+    ]
+   }
+  }
+ },
+ "seeds": [
+  {
+   "id": "maplebrook-assets",
+   "category": "Financial",
+   "metricOrFinding": "Assets FY2025",
+   "value": "$432m",
+   "unit": "CAD",
+   "period": "FY2025",
+   "sourceURL": "https://maplebrook.example/fs2025.pdf",
+   "collectionDate": "2026-10-04",
+   "dataType": "AUDITED",
+   "verificationStatus": "Verified",
+   "approvalStatus": "Pending Review"
+  },
+  {
+   "id": "maplebrook-voice",
+   "category": "Member Voice",
+   "metricOrFinding": "App reviews mention slow logins",
+   "dataType": "PUBLIC VOICE",
+   "approvalStatus": "Needs Verification",
+   "sourceURL": "javascript:alert(1)"
+  }
+ ]
+}

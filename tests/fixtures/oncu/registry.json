@@ -1,0 +1,8 @@
+{
+  "note": "Fictional test fixture in ONCU's data-layer shape. Not a real credit union.",
+  "rosterVerified": "2026-10-11",
+  "institutions": [
+    { "id": "maplebrook", "name": "Maplebrook Community Credit Union", "short": "Maplebrook", "city": "Exampleton, ON",
+      "primary": "#2b6a8f", "website": "https://maplebrook.example/", "legalName": "Maplebrook Community Credit Union Limited", "dataset": "maplebrook" }
+  ]
+}

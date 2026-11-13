@@ -1,0 +1,3 @@
+Playfair Display (c) The Playfair Display Project Authors, and Plus Jakarta Sans (c) The Plus Jakarta Sans Project Authors.
+Both are licensed under the SIL Open Font License, Version 1.1 — https://openfontlicense.org
+Latin subsets as used by the Trisanga website design; served from this app (no third-party requests at runtime).
